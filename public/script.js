@@ -267,7 +267,7 @@ function getStatus(venda) {
     if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
         return 'ENTREGUE';
     }
-    return 'EM_ANDAMENTO';
+    return 'PENDENTE';
 }
 
 function formatOrigem(origem) {
