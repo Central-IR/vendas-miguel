@@ -745,9 +745,10 @@ tbody tr.row-fechada:hover {
 }
 
 .badge.fechada, .badge.pago {
-    background: rgba(34, 197, 94, 0.1);
-    color: #16A34A;
-    border: 1px solid rgba(34, 197, 94, 0.2);
+    background: rgba(34, 197, 94, 0.2); /* MUDE de 0.1 para 0.2 */
+    color: #15803d; /* MUDE de #16A34A para #15803d (mais escuro) */
+    border: 1px solid rgba(34, 197, 94, 0.4); /* MUDE de 0.2 para 0.4 */
+    font-weight: 700; /* ADICIONE esta linha */
 }
 
 .badge.entregue {
