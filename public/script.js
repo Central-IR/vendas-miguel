@@ -1,56 +1,16 @@
-const API_URL = 'https://vendas-miguel.onrender.com';
-const PORTAL_URL = 'https://ir-comercio-portal-zcan.onrender.com';
-const DEVELOPMENT_MODE = false; // Mudar para true apenas em desenvolvimento local
+const API_URL = window.location.origin + '/api';
 
 let vendas = [];
 let isOnline = false;
 let lastDataHash = '';
-let sessionToken = null;
 
 console.log('🚀 Vendas Miguel iniciada');
 console.log('📍 API URL:', API_URL);
-console.log('🔧 Modo desenvolvimento:', DEVELOPMENT_MODE);
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
-    if (DEVELOPMENT_MODE) {
-        console.log('⚠️ MODO DESENVOLVIMENTO ATIVADO');
-        sessionToken = 'dev-mode';
-        inicializarApp();
-    } else {
-        verificarAutenticacao();
-    }
-});
-
-function verificarAutenticacao() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenFromUrl = urlParams.get('sessionToken');
-
-    if (tokenFromUrl) {
-        sessionToken = tokenFromUrl;
-        sessionStorage.setItem('vendasMiguelSession', tokenFromUrl);
-        window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-        sessionToken = sessionStorage.getItem('vendasMiguelSession');
-    }
-
-    if (!sessionToken) {
-        mostrarTelaAcessoNegado();
-        return;
-    }
-
     inicializarApp();
-}
-
-function mostrarTelaAcessoNegado(mensagem = 'NÃO AUTORIZADO') {
-    document.body.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: var(--bg-primary); color: var(--text-primary); text-align: center; padding: 2rem;">
-            <h1 style="font-size: 2.2rem; margin-bottom: 1rem;">${mensagem}</h1>
-            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Somente usuários autenticados podem acessar esta área.</p>
-            <a href="${PORTAL_URL}" style="display: inline-block; background: var(--btn-register); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ir para o Portal</a>
-        </div>
-    `;
-}
+});
 
 function inicializarApp() {
     checkServerStatus();
@@ -61,24 +21,7 @@ function inicializarApp() {
 
 async function checkServerStatus() {
     try {
-        const headers = {
-            'Accept': 'application/json'
-        };
-        
-        if (!DEVELOPMENT_MODE && sessionToken) {
-            headers['X-Session-Token'] = sessionToken;
-        }
-
-        const response = await fetch(`${API_URL}/../health`, {
-            headers: headers
-        });
-
-        if (!DEVELOPMENT_MODE && response.status === 401) {
-            sessionStorage.removeItem('vendasMiguelSession');
-            mostrarTelaAcessoNegado('Sua sessão expirou');
-            return false;
-        }
-
+        const response = await fetch(`${API_URL}/../health`);
         const wasOffline = !isOnline;
         isOnline = response.ok;
         
@@ -113,24 +56,7 @@ async function syncData() {
     showToast('Sincronizando...', 'success');
     
     try {
-        const headers = {
-            'Accept': 'application/json'
-        };
-        
-        if (!DEVELOPMENT_MODE && sessionToken) {
-            headers['X-Session-Token'] = sessionToken;
-        }
-
-        const response = await fetch(`${API_URL}/sync`, {
-            headers: headers
-        });
-
-        if (!DEVELOPMENT_MODE && response.status === 401) {
-            sessionStorage.removeItem('vendasMiguelSession');
-            mostrarTelaAcessoNegado('Sua sessão expirou');
-            return;
-        }
-
+        const response = await fetch(`${API_URL}/sync`);
         if (!response.ok) throw new Error('Erro na sincronização');
         
         await loadVendas();
@@ -145,24 +71,7 @@ async function loadVendas() {
     if (!isOnline) return;
 
     try {
-        const headers = {
-            'Accept': 'application/json'
-        };
-        
-        if (!DEVELOPMENT_MODE && sessionToken) {
-            headers['X-Session-Token'] = sessionToken;
-        }
-
-        const response = await fetch(`${API_URL}/vendas`, {
-            headers: headers
-        });
-
-        if (!DEVELOPMENT_MODE && response.status === 401) {
-            sessionStorage.removeItem('vendasMiguelSession');
-            mostrarTelaAcessoNegado('Sua sessão expirou');
-            return;
-        }
-
+        const response = await fetch(`${API_URL}/vendas`);
         if (!response.ok) throw new Error('Erro ao carregar vendas');
 
         const data = await response.json();
@@ -183,24 +92,7 @@ async function loadVendas() {
 
 async function loadDashboard() {
     try {
-        const headers = {
-            'Accept': 'application/json'
-        };
-        
-        if (!DEVELOPMENT_MODE && sessionToken) {
-            headers['X-Session-Token'] = sessionToken;
-        }
-
-        const response = await fetch(`${API_URL}/dashboard`, {
-            headers: headers
-        });
-
-        if (!DEVELOPMENT_MODE && response.status === 401) {
-            sessionStorage.removeItem('vendasMiguelSession');
-            mostrarTelaAcessoNegado('Sua sessão expirou');
-            return;
-        }
-
+        const response = await fetch(`${API_URL}/dashboard`);
         if (!response.ok) throw new Error('Erro ao carregar dashboard');
 
         const stats = await response.json();
