@@ -63,15 +63,6 @@ function changeMonth(direction) {
     updateMonthDisplay();
     updateDisplay();
 }
-
-function inicializarApp() {
-    checkServerStatus();
-    loadVendas();
-    updateMonthDisplay();
-    setInterval(checkServerStatus, 30000); // Check a cada 30s
-    setInterval(loadVendas, 60000); // Reload a cada 60s
-}
-
 async function checkServerStatus() {
     try {
         const response = await fetch(`${API_URL}/../health`);
