@@ -1,12 +1,11 @@
 const API_URL = window.location.origin + '/api';
 const PORTAL_URL = 'https://ir-comercio-portal-zcan.onrender.com';
-const DEVELOPMENT_MODE = true; // Modo desenvolvimento (igual Ordem de Compra)
+const DEVELOPMENT_MODE = true;
 
-let vendas = [];
 let isOnline = false;
 let lastDataHash = '';
 let currentMonth = new Date();
-let allVendas = []; // Guardar todas as vendas
+let allVendas = [];
 let sessionToken = null;
 let calendarYear = new Date().getFullYear();
 
@@ -48,15 +47,16 @@ function inicializarApp() {
     checkServerStatus();
     loadVendas();
     updateMonthDisplay();
-    setInterval(checkServerStatus, 15000); // Check a cada 15s (antes 30s)
-    setInterval(loadVendas, 30000); // Reload a cada 30s (antes 60s)
+    setInterval(checkServerStatus, 15000);
+    setInterval(loadVendas, 30000);
 }
 
 function updateMonthDisplay() {
     const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
                         'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     const monthStr = `${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
-    document.getElementById('currentMonth').textContent = monthStr;
+    const elem = document.getElementById('currentMonth');
+    if (elem) elem.textContent = monthStr;
 }
 
 function changeMonth(direction) {
@@ -65,9 +65,10 @@ function changeMonth(direction) {
     updateDisplay();
 }
 
-// Calendar functions
 function toggleCalendar() {
     const modal = document.getElementById('calendarModal');
+    if (!modal) return;
+    
     if (modal.classList.contains('show')) {
         modal.classList.remove('show');
     } else {
@@ -90,11 +91,8 @@ function renderCalendar() {
     
     yearElement.textContent = calendarYear;
     
-    const monthNames = [
-        'Janeiro', 'Fevereiro', 'Março', 'Abril', 
-        'Maio', 'Junho', 'Julho', 'Agosto', 
-        'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-    ];
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     
     monthsContainer.innerHTML = '';
     
@@ -119,9 +117,10 @@ function selectMonth(monthIndex) {
     toggleCalendar();
 }
 
-// Chart modal functions
 function toggleChartModal() {
     const modal = document.getElementById('chartModal');
+    if (!modal) return;
+    
     if (modal.classList.contains('show')) {
         modal.classList.remove('show');
     } else {
@@ -132,7 +131,8 @@ function toggleChartModal() {
 
 function calculateAnnualStats() {
     const year = currentMonth.getFullYear();
-    document.getElementById('chartYear').textContent = year;
+    const yearElem = document.getElementById('chartYear');
+    if (yearElem) yearElem.textContent = year;
     
     const yearVendas = allVendas.filter(v => {
         const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
@@ -153,31 +153,26 @@ function calculateAnnualStats() {
     
     const pendente = faturado - pago;
     
-    document.getElementById('chartFaturado').textContent = formatCurrency(faturado);
-    document.getElementById('chartPago').textContent = formatCurrency(pago);
-    document.getElementById('chartPendente').textContent = formatCurrency(pendente);
+    const faturadoElem = document.getElementById('chartFaturado');
+    const pagoElem = document.getElementById('chartPago');
+    const pendenteElem = document.getElementById('chartPendente');
+    
+    if (faturadoElem) faturadoElem.textContent = formatCurrency(faturado);
+    if (pagoElem) pagoElem.textContent = formatCurrency(pago);
+    if (pendenteElem) pendenteElem.textContent = formatCurrency(pendente);
 }
 
-// Close modals on outside click
 document.addEventListener('click', (e) => {
     const calendarModal = document.getElementById('calendarModal');
     const chartModal = document.getElementById('chartModal');
     
-    if (e.target === calendarModal) {
+    if (calendarModal && e.target === calendarModal) {
         calendarModal.classList.remove('show');
     }
-    if (e.target === chartModal) {
+    if (chartModal && e.target === chartModal) {
         chartModal.classList.remove('show');
     }
 });
-
-function inicializarApp() {
-    checkServerStatus();
-    loadVendas();
-    updateMonthDisplay();
-    setInterval(checkServerStatus, 30000); // Check a cada 30s
-    setInterval(loadVendas, 60000); // Reload a cada 60s
-}
 
 async function checkServerStatus() {
     try {
@@ -235,7 +230,7 @@ async function loadVendas() {
         if (!response.ok) throw new Error('Erro ao carregar vendas');
 
         const data = await response.json();
-        allVendas = data; // Guardar todas
+        allVendas = data;
         
         const newHash = JSON.stringify(allVendas.map(v => v.id));
         if (newHash !== lastDataHash) {
@@ -243,7 +238,6 @@ async function loadVendas() {
             updateDisplay();
         }
 
-        // Carregar dashboard
         await loadDashboard();
     } catch (error) {
         console.error('❌ Erro ao carregar vendas:', error);
@@ -252,7 +246,6 @@ async function loadVendas() {
 
 async function loadDashboard() {
     try {
-        // Filtrar vendas do mês atual
         const monthVendas = allVendas.filter(v => {
             const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
             return dataEmissao.getMonth() === currentMonth.getMonth() && 
@@ -266,28 +259,27 @@ async function loadDashboard() {
             faturado: 0
         };
 
-        if (monthVendas) {
-            monthVendas.forEach(venda => {
-                const valor = parseFloat(venda.valor_nf) || 0;
-                
-                // Faturado = tudo
-                stats.faturado += valor;
+        monthVendas.forEach(venda => {
+            const valor = parseFloat(venda.valor_nf) || 0;
+            stats.faturado += valor;
 
-                if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
-                    // Pago
-                    stats.pago += valor;
-                } else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
-                    // A receber (entregue mas não pago)
-                    stats.aReceber += valor;
-                    stats.entregue += 1;
-                }
-            });
-        }
+            if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
+                stats.pago += valor;
+            } else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
+                stats.aReceber += valor;
+                stats.entregue += 1;
+            }
+        });
         
-        document.getElementById('totalPago').textContent = formatCurrency(stats.pago);
-        document.getElementById('totalAReceber').textContent = formatCurrency(stats.aReceber);
-        document.getElementById('totalEntregue').textContent = stats.entregue;
-        document.getElementById('totalFaturado').textContent = formatCurrency(stats.faturado);
+        const pagoElem = document.getElementById('totalPago');
+        const receberElem = document.getElementById('totalAReceber');
+        const entregueElem = document.getElementById('totalEntregue');
+        const faturadoElem = document.getElementById('totalFaturado');
+        
+        if (pagoElem) pagoElem.textContent = formatCurrency(stats.pago);
+        if (receberElem) receberElem.textContent = formatCurrency(stats.aReceber);
+        if (entregueElem) entregueElem.textContent = stats.entregue;
+        if (faturadoElem) faturadoElem.textContent = formatCurrency(stats.faturado);
     } catch (error) {
         console.error('❌ Erro ao carregar dashboard:', error);
     }
@@ -299,12 +291,13 @@ function filterVendas() {
 
 function updateDisplay() {
     updateTable();
+    loadDashboard();
 }
 
 function updateTable() {
     const container = document.getElementById('vendasContainer');
+    if (!container) return;
     
-    // Filtrar por mês atual
     const monthVendas = allVendas.filter(v => {
         const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
         return dataEmissao.getMonth() === currentMonth.getMonth() && 
@@ -313,8 +306,11 @@ function updateTable() {
     
     let filteredVendas = [...monthVendas];
     
-    const search = document.getElementById('search').value.toLowerCase();
-    const filterStatus = document.getElementById('filterStatus').value;
+    const searchElem = document.getElementById('search');
+    const filterStatusElem = document.getElementById('filterStatus');
+    
+    const search = searchElem ? searchElem.value.toLowerCase() : '';
+    const filterStatus = filterStatusElem ? filterStatusElem.value : '';
     
     if (search) {
         filteredVendas = filteredVendas.filter(v => 
@@ -370,22 +366,20 @@ function getStatus(venda) {
     if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
         return 'PAGO';
     }
-    if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
-        return 'ENTREGUE';
-    }
-    return 'ENTREGUE'; // Default
+    return 'ENTREGUE';
 }
 
 function viewVenda(id) {
     const venda = allVendas.find(v => v.id === id);
     if (!venda) return;
     
-    document.getElementById('modalNumeroNF').textContent = venda.numero_nf;
+    const nfElem = document.getElementById('modalNumeroNF');
+    if (nfElem) nfElem.textContent = venda.numero_nf;
     
     const modalBody = document.getElementById('modalBody');
+    if (!modalBody) return;
     
     if (venda.origem === 'CONTAS_RECEBER') {
-        // Exibir dados de Contas a Receber
         modalBody.innerHTML = `
             <div class="info-section">
                 <h4>Informações da Conta</h4>
@@ -401,7 +395,6 @@ function viewVenda(id) {
             </div>
         `;
     } else {
-        // Exibir dados de Controle de Frete
         modalBody.innerHTML = `
             <div class="info-section">
                 <h4>Informações do Frete</h4>
@@ -421,14 +414,13 @@ function viewVenda(id) {
         `;
     }
     
-    document.getElementById('infoModal').classList.add('show');
+    const modal = document.getElementById('infoModal');
+    if (modal) modal.classList.add('show');
 }
 
 function closeInfoModal() {
     const modal = document.getElementById('infoModal');
-    if (modal) {
-        modal.classList.remove('show');
-    }
+    if (modal) modal.classList.remove('show');
 }
 
 function formatDate(dateString) {
