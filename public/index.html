@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Vendas - Miguel</title>
-    <link rel="stylesheet" href="styles.css">
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app-content">
+    <div class="app-content" style="animation: fadeIn 0.3s ease;">
         <div class="container">
             <div class="header">
                 <div class="header-left">
-                    <h1>Vendas</h1>
+                    <h1>Vendas - Miguel</h1>
                     <div id="connectionStatus" class="connection-status offline">
                         <span class="status-dot"></span>
                     </div>
@@ -79,20 +79,32 @@
                     </svg>
                     <input type="text" id="search" placeholder="Pesquisar por NF, órgão..." oninput="filterVendas()">
                     
-                    <div class="month-navigation-inline">
-                        <button onclick="changeMonth(-1)" class="month-nav-arrow" title="Mês anterior">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="15 18 9 12 15 6"></polyline>
+                    <div class="search-bar-filters">
+                        <div class="filter-dropdown-inline">
+                            <select id="filterStatus" onchange="filterVendas()">
+                                <option value="">Todos os Status</option>
+                                <option value="PAGO">Pago</option>
+                                <option value="ENTREGUE">Entregue</option>
+                            </select>
+                            <svg class="dropdown-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="6 9 12 15 18 9"></polyline>
                             </svg>
-                        </button>
-                        <div class="month-display-inline">
-                            <span id="currentMonth">Carregando...</span>
                         </div>
-                        <button onclick="changeMonth(1)" class="month-nav-arrow" title="Próximo mês">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="9 18 15 12 9 6"></polyline>
-                            </svg>
-                        </button>
+                        <div class="month-navigation-inline">
+                            <button onclick="changeMonth(-1)" class="month-nav-arrow" title="Mês anterior">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="15 18 9 12 15 6"></polyline>
+                                </svg>
+                            </button>
+                            <div class="month-display-inline">
+                                <span id="currentMonth">Carregando...</span>
+                            </div>
+                            <button onclick="changeMonth(1)" class="month-nav-arrow" title="Próximo mês">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polyline points="9 18 15 12 9 6"></polyline>
+                                </svg>
+                            </button>
+                        </div>
                     </div>
 
                     <button class="calendar-btn" onclick="toggleCalendar()" title="Selecionar mês">
@@ -103,21 +115,68 @@
                             <line x1="3" y1="10" x2="21" y2="10"></line>
                         </svg>
                     </button>
-                    
                     <button class="calendar-btn" onclick="syncData()" title="Sincronizar">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <polyline points="23 4 23 10 17 10"></polyline>
                             <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"></path>
                         </svg>
                     </button>
-                    
-                    <button class="calendar-btn" onclick="openAnualModal()" title="Gráfico Anual">
+                    <button class="calendar-btn" onclick="toggleChartModal()" title="Relatório Anual">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <line x1="18" y1="20" x2="18" y2="10"></line>
                             <line x1="12" y1="20" x2="12" y2="4"></line>
                             <line x1="6" y1="20" x2="6" y2="14"></line>
                         </svg>
                     </button>
+                </div>
+            </div>
+
+            <!-- Calendar Modal -->
+            <div class="calendar-modal" id="calendarModal">
+                <div class="calendar-content">
+                    <div class="calendar-header">
+                        <button onclick="changeCalendarYear(-1)" class="calendar-year-nav">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="15 18 9 12 15 6"></polyline>
+                            </svg>
+                        </button>
+                        <h3 id="calendarYear">2026</h3>
+                        <button onclick="changeCalendarYear(1)" class="calendar-year-nav">
+                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <polyline points="9 18 15 12 9 6"></polyline>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="calendar-months" id="calendarMonths"></div>
+                </div>
+            </div>
+
+            <!-- Chart Modal -->
+            <div class="calendar-modal" id="chartModal">
+                <div class="calendar-content" style="max-width: 600px;">
+                    <div class="calendar-header">
+                        <h3>Relatório Anual - <span id="chartYear">2026</span></h3>
+                        <button onclick="toggleChartModal()" class="calendar-year-nav" style="background: transparent;">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="18" y1="6" x2="6" y2="18"></line>
+                                <line x1="6" y1="6" x2="18" y2="18"></line>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="chart-content">
+                        <div class="chart-item">
+                            <div class="chart-label">💰 Total Faturado Anual</div>
+                            <div class="chart-value" id="chartFaturado">R$ 0,00</div>
+                        </div>
+                        <div class="chart-item">
+                            <div class="chart-label">✅ Total Pago Anual</div>
+                            <div class="chart-value success" id="chartPago">R$ 0,00</div>
+                        </div>
+                        <div class="chart-item">
+                            <div class="chart-label">⏳ Aguardando Pagamento</div>
+                            <div class="chart-value warning" id="chartPendente">R$ 0,00</div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -143,66 +202,6 @@
         </div>
     </div>
 
-    <!-- Modal Gráfico Anual -->
-    <div class="modal-overlay" id="anualModal">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h3 class="modal-title">Resumo Anual - <span id="anualYear">2026</span></h3>
-                <button class="close-modal" onclick="closeAnualModal()">✕</button>
-            </div>
-            
-            <div class="dashboard-grid" style="margin-bottom: 0;">
-                <div class="stat-card">
-                    <div class="stat-icon stat-icon-info">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <line x1="12" y1="1" x2="12" y2="23"></line>
-                            <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
-                        </svg>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-value stat-value-info" id="anualFaturado">R$ 0,00</div>
-                        <div class="stat-label">Faturado no Ano</div>
-                    </div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon stat-icon-success">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <polyline points="20 6 9 17 4 12"></polyline>
-                        </svg>
-                    </div>
-                    <div class="stat-content">
-                        <div class="stat-value stat-value-success" id="anualPago">R$ 0,00</div>
-                        <div class="stat-label">Pago no Ano</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="modal-actions">
-                <button type="button" onclick="closeAnualModal()" class="secondary">Fechar</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- Calendar Modal -->
-    <div class="calendar-modal" id="calendarModal">
-        <div class="calendar-content">
-            <div class="calendar-header">
-                <button onclick="changeCalendarYear(-1)" class="calendar-year-nav">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="15 18 9 12 15 6"></polyline>
-                    </svg>
-                </button>
-                <h3 id="calendarYear">2026</h3>
-                <button onclick="changeCalendarYear(1)" class="calendar-year-nav">
-                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                        <polyline points="9 18 15 12 9 6"></polyline>
-                    </svg>
-                </button>
-            </div>
-            <div class="calendar-months" id="calendarMonths"></div>
-        </div>
-    </div>
-
     <!-- MODAL DE VISUALIZAÇÃO -->
     <div class="modal-overlay" id="infoModal">
         <div class="modal-content">
@@ -220,6 +219,5 @@
     </div>
 
     <script src="script.js"></script>
-    <script src="calendar.js"></script>
 </body>
 </html>
