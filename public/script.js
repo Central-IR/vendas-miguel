@@ -47,8 +47,8 @@ function inicializarApp() {
     checkServerStatus();
     loadVendas();
     updateMonthDisplay();
-    setInterval(checkServerStatus, 30000); // Check a cada 30s
-    setInterval(loadVendas, 60000); // Reload a cada 60s
+    setInterval(checkServerStatus, 10000); // MUDE de 30000 para 10000 (10s)
+    setInterval(loadVendas, 15000); // MUDE de 60000 para 15000 (15s)
 }
 
 function updateMonthDisplay() {
