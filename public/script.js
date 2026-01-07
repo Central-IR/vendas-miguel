@@ -322,8 +322,8 @@ function updateTable() {
     if (filterStatus) {
         filteredVendas = filteredVendas.filter(v => {
             if (filterStatus === 'PAGO') return v.origem === 'CONTAS_RECEBER' && v.data_pagamento;
-            if (filterStatus === 'ENTREGUE') return v.origem === 'CONTROLE_FRETE' && v.status_frete === 'ENTREGUE';
-            return true;
+            if (v.origem === 'CONTROLE_FRETE') return v.status_frete === filterStatus;
+            return false;
         });
     }
     
@@ -340,7 +340,21 @@ function updateTable() {
     
     container.innerHTML = filteredVendas.map(venda => {
         const status = getStatus(venda);
-        const statusClass = status === 'PAGO' ? 'pago' : 'entregue';
+        let statusClass = '';
+        
+        if (status === 'PAGO') {
+            statusClass = 'pago';
+        } else if (status === 'ENTREGUE') {
+            statusClass = 'entregue';
+        } else if (status === 'EM_TRANSITO') {
+            statusClass = 'transito';
+        } else if (status === 'AGUARDANDO_COLETA') {
+            statusClass = 'aguardando';
+        } else if (status === 'EXTRAVIADO') {
+            statusClass = 'extraviado';
+        } else if (status === 'DEVOLVIDO') {
+            statusClass = 'devolvido';
+        }
         
         return `
             <tr class="${status === 'PAGO' ? 'row-pago' : ''}">
@@ -350,7 +364,7 @@ function updateTable() {
                 <td><strong>${formatCurrency(venda.valor_nf)}</strong></td>
                 <td>${venda.tipo_nf || '-'}</td>
                 <td>
-                    <span class="badge ${statusClass}">${status}</span>
+                    <span class="badge ${statusClass}">${status.replace(/_/g, ' ')}</span>
                 </td>
                 <td class="actions-cell">
                     <div class="actions">
@@ -366,7 +380,11 @@ function getStatus(venda) {
     if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
         return 'PAGO';
     }
-    return 'ENTREGUE';
+    if (venda.origem === 'CONTROLE_FRETE') {
+        // Retornar o status real do frete
+        return venda.status_frete || 'EM_TRANSITO';
+    }
+    return 'EM_TRANSITO';
 }
 
 function viewVenda(id) {
