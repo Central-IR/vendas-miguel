@@ -3,15 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vendas - Miguel</title>
-    <link rel="stylesheet" href="styles.css">
+    <title>Vendas</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <div class="app-content" style="animation: fadeIn 0.3s ease;">
+    <div class="splash-screen" id="splashScreen">
+        <h1 class="splash-title">Vendas</h1>
+    </div>
+
+    <div class="app-content">
         <div class="container">
             <div class="header">
                 <div class="header-left">
-                    <h1>Vendas - Miguel</h1>
+                    <h1>Vendas</h1>
                     <div id="connectionStatus" class="connection-status offline">
                         <span class="status-dot"></span>
                     </div>
@@ -218,6 +222,12 @@
         </div>
     </div>
 
+    <script>
+        setTimeout(() => {
+            const splash = document.getElementById('splashScreen');
+            if (splash) splash.style.display = 'none';
+        }, 2000);
+    </script>
     <script src="script.js"></script>
 </body>
 </html>
