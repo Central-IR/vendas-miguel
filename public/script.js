@@ -217,10 +217,6 @@ function updateTable() {
         );
     }
     
-    if (filterOrigem) {
-        filteredVendas = filteredVendas.filter(v => v.origem === filterOrigem);
-    }
-    
     if (filterStatus) {
         filteredVendas = filteredVendas.filter(v => {
             if (filterStatus === 'PAGO') return v.origem === 'CONTAS_RECEBER' && v.data_pagamento;
