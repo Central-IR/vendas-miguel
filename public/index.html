@@ -78,24 +78,12 @@
                         <path d="m21 21-4.35-4.35"></path>
                     </svg>
                     <input type="text" id="search" placeholder="Pesquisar por NF, órgão..." oninput="filterVendas()">
-                    
-                    <div class="search-bar-filters">
-                        <div class="filter-dropdown-inline">
-                            <select id="filterOrigem" onchange="filterVendas()">
-                                <option value="">Origem</option>
-                                <option value="CONTAS_RECEBER">Contas a Receber</option>
-                                <option value="CONTROLE_FRETE">Controle de Frete</option>
-                            </select>
-                            <svg class="dropdown-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                <polyline points="6 9 12 15 18 9"></polyline>
-                            </svg>
-                        </div>
+
                         <div class="filter-dropdown-inline">
                             <select id="filterStatus" onchange="filterVendas()">
                                 <option value="">Status</option>
                                 <option value="PAGO">Pago</option>
                                 <option value="ENTREGUE">Entregue</option>
-                                <option value="EM_ANDAMENTO">Em Andamento</option>
                             </select>
                             <svg class="dropdown-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="6 9 12 15 18 9"></polyline>
