@@ -1,4 +1,4 @@
-const API_URL = window.location.origin + '/api';
+const API_URL = 'https://vendas-miguel.onrender.com';
 const PORTAL_URL = 'https://ir-comercio-portal-zcan.onrender.com';
 const DEVELOPMENT_MODE = false; // Mudar para true apenas em desenvolvimento local
 
