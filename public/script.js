@@ -356,3 +356,34 @@ function showToast(message, type = 'success') {
         setTimeout(() => messageDiv.remove(), 300);
     }, 3000);
 }
+
+function openAnualModal() {
+    const year = currentMonth.getFullYear();
+    document.getElementById('anualYear').textContent = year;
+    
+    const yearVendas = allVendas.filter(v => {
+        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
+        return dataEmissao.getFullYear() === year;
+    });
+
+    let faturado = 0;
+    let pago = 0;
+
+    yearVendas.forEach(venda => {
+        const valor = parseFloat(venda.valor_nf) || 0;
+        faturado += valor;
+        
+        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
+            pago += valor;
+        }
+    });
+    
+    document.getElementById('anualFaturado').textContent = formatCurrency(faturado);
+    document.getElementById('anualPago').textContent = formatCurrency(pago);
+    
+    document.getElementById('anualModal').classList.add('show');
+}
+
+function closeAnualModal() {
+    document.getElementById('anualModal').classList.remove('show');
+}
