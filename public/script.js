@@ -1,20 +1,73 @@
 const API_URL = window.location.origin + '/api';
+const PORTAL_URL = 'https://ir-comercio-portal-zcan.onrender.com';
+const DEVELOPMENT_MODE = true; // Modo desenvolvimento (igual Ordem de Compra)
 
 let vendas = [];
 let isOnline = false;
 let lastDataHash = '';
+let currentMonth = new Date();
+let allVendas = []; // Guardar todas as vendas
+let sessionToken = null;
 
 console.log('🚀 Vendas Miguel iniciada');
 console.log('📍 API URL:', API_URL);
 
 // Inicialização
 document.addEventListener('DOMContentLoaded', () => {
+    if (DEVELOPMENT_MODE) {
+        sessionToken = 'dev-mode';
+    } else {
+        const urlParams = new URLSearchParams(window.location.search);
+        sessionToken = urlParams.get('sessionToken') || sessionStorage.getItem('vendasMiguelSession');
+        
+        if (!sessionToken) {
+            mostrarMensagemNaoAutorizado();
+            return;
+        }
+        
+        if (urlParams.get('sessionToken')) {
+            sessionStorage.setItem('vendasMiguelSession', sessionToken);
+        }
+    }
+    
     inicializarApp();
 });
+
+function mostrarMensagemNaoAutorizado() {
+    document.body.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #1a1a1a; color: white; text-align: center; padding: 2rem;">
+            <h1 style="font-size: 3rem; margin-bottom: 1rem; color: #CC7000;">NÃO AUTORIZADO</h1>
+            <p style="font-size: 1.2rem; color: #999; margin-bottom: 2rem;">Acesso restrito. Por favor, faça login no portal.</p>
+            <a href="${PORTAL_URL}" style="background: #CC7000; color: white; padding: 1rem 2rem; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1.1rem;">Ir para o Portal</a>
+        </div>
+    `;
+}
 
 function inicializarApp() {
     checkServerStatus();
     loadVendas();
+    updateMonthDisplay();
+    setInterval(checkServerStatus, 30000); // Check a cada 30s
+    setInterval(loadVendas, 60000); // Reload a cada 60s
+}
+
+function updateMonthDisplay() {
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const monthStr = `${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
+    document.getElementById('currentMonth').textContent = monthStr;
+}
+
+function changeMonth(direction) {
+    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + direction, 1);
+    updateMonthDisplay();
+    updateDisplay();
+}
+
+function inicializarApp() {
+    checkServerStatus();
+    loadVendas();
+    updateMonthDisplay();
     setInterval(checkServerStatus, 30000); // Check a cada 30s
     setInterval(loadVendas, 60000); // Reload a cada 60s
 }
@@ -75,9 +128,9 @@ async function loadVendas() {
         if (!response.ok) throw new Error('Erro ao carregar vendas');
 
         const data = await response.json();
-        vendas = data;
+        allVendas = data; // Guardar todas
         
-        const newHash = JSON.stringify(vendas.map(v => v.id));
+        const newHash = JSON.stringify(allVendas.map(v => v.id));
         if (newHash !== lastDataHash) {
             lastDataHash = newHash;
             updateDisplay();
@@ -92,10 +145,37 @@ async function loadVendas() {
 
 async function loadDashboard() {
     try {
-        const response = await fetch(`${API_URL}/dashboard`);
-        if (!response.ok) throw new Error('Erro ao carregar dashboard');
+        // Filtrar vendas do mês atual
+        const monthVendas = allVendas.filter(v => {
+            const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
+            return dataEmissao.getMonth() === currentMonth.getMonth() && 
+                   dataEmissao.getFullYear() === currentMonth.getFullYear();
+        });
 
-        const stats = await response.json();
+        const stats = {
+            pago: 0,
+            aReceber: 0,
+            entregue: 0,
+            faturado: 0
+        };
+
+        if (monthVendas) {
+            monthVendas.forEach(venda => {
+                const valor = parseFloat(venda.valor_nf) || 0;
+                
+                // Faturado = tudo
+                stats.faturado += valor;
+
+                if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
+                    // Pago
+                    stats.pago += valor;
+                } else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
+                    // A receber (entregue mas não pago)
+                    stats.aReceber += valor;
+                    stats.entregue += 1;
+                }
+            });
+        }
         
         document.getElementById('totalPago').textContent = formatCurrency(stats.pago);
         document.getElementById('totalAReceber').textContent = formatCurrency(stats.aReceber);
@@ -116,7 +196,15 @@ function updateDisplay() {
 
 function updateTable() {
     const container = document.getElementById('vendasContainer');
-    let filteredVendas = [...vendas];
+    
+    // Filtrar por mês atual
+    const monthVendas = allVendas.filter(v => {
+        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
+        return dataEmissao.getMonth() === currentMonth.getMonth() && 
+               dataEmissao.getFullYear() === currentMonth.getFullYear();
+    });
+    
+    let filteredVendas = [...monthVendas];
     
     const search = document.getElementById('search').value.toLowerCase();
     const filterOrigem = document.getElementById('filterOrigem').value;
@@ -195,7 +283,7 @@ function formatOrigem(origem) {
 }
 
 function viewVenda(id) {
-    const venda = vendas.find(v => v.id === id);
+    const venda = allVendas.find(v => v.id === id);
     if (!venda) return;
     
     document.getElementById('modalNumeroNF').textContent = venda.numero_nf;
