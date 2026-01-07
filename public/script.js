@@ -8,6 +8,7 @@ let lastDataHash = '';
 let currentMonth = new Date();
 let allVendas = []; // Guardar todas as vendas
 let sessionToken = null;
+let calendarYear = new Date().getFullYear();
 
 console.log('🚀 Vendas Miguel iniciada');
 console.log('📍 API URL:', API_URL);
@@ -47,8 +48,8 @@ function inicializarApp() {
     checkServerStatus();
     loadVendas();
     updateMonthDisplay();
-    setInterval(checkServerStatus, 10000); // MUDE de 30000 para 10000 (10s)
-    setInterval(loadVendas, 15000); // MUDE de 60000 para 15000 (15s)
+    setInterval(checkServerStatus, 15000); // Check a cada 15s (antes 30s)
+    setInterval(loadVendas, 30000); // Reload a cada 30s (antes 60s)
 }
 
 function updateMonthDisplay() {
@@ -63,6 +64,121 @@ function changeMonth(direction) {
     updateMonthDisplay();
     updateDisplay();
 }
+
+// Calendar functions
+function toggleCalendar() {
+    const modal = document.getElementById('calendarModal');
+    if (modal.classList.contains('show')) {
+        modal.classList.remove('show');
+    } else {
+        calendarYear = currentMonth.getFullYear();
+        renderCalendar();
+        modal.classList.add('show');
+    }
+}
+
+function changeCalendarYear(direction) {
+    calendarYear += direction;
+    renderCalendar();
+}
+
+function renderCalendar() {
+    const yearElement = document.getElementById('calendarYear');
+    const monthsContainer = document.getElementById('calendarMonths');
+    
+    if (!yearElement || !monthsContainer) return;
+    
+    yearElement.textContent = calendarYear;
+    
+    const monthNames = [
+        'Janeiro', 'Fevereiro', 'Março', 'Abril', 
+        'Maio', 'Junho', 'Julho', 'Agosto', 
+        'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+    ];
+    
+    monthsContainer.innerHTML = '';
+    
+    monthNames.forEach((name, index) => {
+        const monthButton = document.createElement('div');
+        monthButton.className = 'calendar-month';
+        monthButton.textContent = name;
+        
+        if (calendarYear === currentMonth.getFullYear() && index === currentMonth.getMonth()) {
+            monthButton.classList.add('current');
+        }
+        
+        monthButton.onclick = () => selectMonth(index);
+        monthsContainer.appendChild(monthButton);
+    });
+}
+
+function selectMonth(monthIndex) {
+    currentMonth = new Date(calendarYear, monthIndex, 1);
+    updateMonthDisplay();
+    updateDisplay();
+    toggleCalendar();
+}
+
+// Chart modal functions
+function toggleChartModal() {
+    const modal = document.getElementById('chartModal');
+    if (modal.classList.contains('show')) {
+        modal.classList.remove('show');
+    } else {
+        calculateAnnualStats();
+        modal.classList.add('show');
+    }
+}
+
+function calculateAnnualStats() {
+    const year = currentMonth.getFullYear();
+    document.getElementById('chartYear').textContent = year;
+    
+    const yearVendas = allVendas.filter(v => {
+        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
+        return dataEmissao.getFullYear() === year;
+    });
+    
+    let faturado = 0;
+    let pago = 0;
+    
+    yearVendas.forEach(venda => {
+        const valor = parseFloat(venda.valor_nf) || 0;
+        faturado += valor;
+        
+        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
+            pago += valor;
+        }
+    });
+    
+    const pendente = faturado - pago;
+    
+    document.getElementById('chartFaturado').textContent = formatCurrency(faturado);
+    document.getElementById('chartPago').textContent = formatCurrency(pago);
+    document.getElementById('chartPendente').textContent = formatCurrency(pendente);
+}
+
+// Close modals on outside click
+document.addEventListener('click', (e) => {
+    const calendarModal = document.getElementById('calendarModal');
+    const chartModal = document.getElementById('chartModal');
+    
+    if (e.target === calendarModal) {
+        calendarModal.classList.remove('show');
+    }
+    if (e.target === chartModal) {
+        chartModal.classList.remove('show');
+    }
+});
+
+function inicializarApp() {
+    checkServerStatus();
+    loadVendas();
+    updateMonthDisplay();
+    setInterval(checkServerStatus, 30000); // Check a cada 30s
+    setInterval(loadVendas, 60000); // Reload a cada 60s
+}
+
 async function checkServerStatus() {
     try {
         const response = await fetch(`${API_URL}/../health`);
@@ -198,7 +314,6 @@ function updateTable() {
     let filteredVendas = [...monthVendas];
     
     const search = document.getElementById('search').value.toLowerCase();
-    const filterOrigem = document.getElementById('filterOrigem').value;
     const filterStatus = document.getElementById('filterStatus').value;
     
     if (search) {
@@ -219,7 +334,7 @@ function updateTable() {
     if (filteredVendas.length === 0) {
         container.innerHTML = `
             <tr>
-                <td colspan="8" style="text-align: center; padding: 2rem;">
+                <td colspan="7" style="text-align: center; padding: 2rem;">
                     Nenhuma venda encontrada
                 </td>
             </tr>
@@ -229,10 +344,10 @@ function updateTable() {
     
     container.innerHTML = filteredVendas.map(venda => {
         const status = getStatus(venda);
-        const statusClass = status === 'PAGO' ? 'pago' : status === 'ENTREGUE' ? 'entregue' : 'pendente';
+        const statusClass = status === 'PAGO' ? 'pago' : 'entregue';
         
         return `
-            <tr>
+            <tr class="${status === 'PAGO' ? 'row-pago' : ''}">
                 <td><strong>${venda.numero_nf}</strong></td>
                 <td style="white-space: nowrap;">${formatDate(venda.data_emissao)}</td>
                 <td>${venda.nome_orgao}</td>
@@ -258,11 +373,7 @@ function getStatus(venda) {
     if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
         return 'ENTREGUE';
     }
-    return 'PENDENTE';
-}
-
-function formatOrigem(origem) {
-    return origem === 'CONTAS_RECEBER' ? 'Contas' : 'Frete';
+    return 'ENTREGUE'; // Default
 }
 
 function viewVenda(id) {
@@ -346,35 +457,4 @@ function showToast(message, type = 'success') {
         messageDiv.style.animation = 'slideOutBottom 0.3s ease forwards';
         setTimeout(() => messageDiv.remove(), 300);
     }, 3000);
-}
-
-function openAnualModal() {
-    const year = currentMonth.getFullYear();
-    document.getElementById('anualYear').textContent = year;
-    
-    const yearVendas = allVendas.filter(v => {
-        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
-        return dataEmissao.getFullYear() === year;
-    });
-
-    let faturado = 0;
-    let pago = 0;
-
-    yearVendas.forEach(venda => {
-        const valor = parseFloat(venda.valor_nf) || 0;
-        faturado += valor;
-        
-        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
-            pago += valor;
-        }
-    });
-    
-    document.getElementById('anualFaturado').textContent = formatCurrency(faturado);
-    document.getElementById('anualPago').textContent = formatCurrency(pago);
-    
-    document.getElementById('anualModal').classList.add('show');
-}
-
-function closeAnualModal() {
-    document.getElementById('anualModal').classList.remove('show');
 }
