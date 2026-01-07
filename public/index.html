@@ -14,6 +14,45 @@
                     <h1>Vendas</h1>
                     <div id="connectionStatus" class="connection-status offline">
                         <span class="status-dot"></span>
+                        <!-- Modal Gráfico Anual -->
+<div class="modal-overlay" id="anualModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Resumo Anual - <span id="anualYear">2026</span></h3>
+            <button class="close-modal" onclick="closeAnualModal()">✕</button>
+        </div>
+        
+        <div class="dashboard-grid" style="margin-bottom: 0;">
+            <div class="stat-card">
+                <div class="stat-icon stat-icon-info">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="12" y1="1" x2="12" y2="23"></line>
+                        <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value stat-value-info" id="anualFaturado">R$ 0,00</div>
+                    <div class="stat-label">Faturado no Ano</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon stat-icon-success">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                </div>
+                <div class="stat-content">
+                    <div class="stat-value stat-value-success" id="anualPago">R$ 0,00</div>
+                    <div class="stat-label">Pago no Ano</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal-actions">
+            <button type="button" onclick="closeAnualModal()" class="secondary">Fechar</button>
+        </div>
+    </div>
+</div>
                     </div>
                 </div>
             </div>
