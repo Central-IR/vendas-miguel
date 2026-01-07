@@ -6,12 +6,6 @@ const { createClient } = require('@supabase/supabase-js');
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-// Portal URL para redirecionamento
-const PORTAL_URL = process.env.PORTAL_URL || 'https://ir-comercio-portal-zcan.onrender.com';
-
-// Modo de desenvolvimento (desabilita autenticação)
-const DEVELOPMENT_MODE = process.env.NODE_ENV !== 'production';
-
 // Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL,
@@ -21,42 +15,7 @@ const supabase = createClient(
 // Middleware
 app.use(cors());
 app.use(express.json());
-
-// Middleware de autenticação
-function requireAuth(req, res, next) {
-  // Permitir em modo desenvolvimento
-  if (DEVELOPMENT_MODE) {
-    console.log('⚠️ MODO DESENVOLVIMENTO - Autenticação desabilitada');
-    return next();
-  }
-
-  const sessionToken = req.headers['x-session-token'];
-  
-  if (!sessionToken) {
-    return res.status(401).json({ 
-      error: 'Não autorizado',
-      message: 'Token de sessão não fornecido' 
-    });
-  }
-
-  // Aqui você pode adicionar validação adicional do token se necessário
-  // Por exemplo, verificar no banco de dados ou cache
-
-  next();
-}
-
-// Servir arquivos estáticos com verificação de autenticação
-app.use(express.static('public', {
-  setHeaders: (res, path) => {
-    // Não aplicar headers especiais em desenvolvimento
-    if (DEVELOPMENT_MODE) return;
-    
-    // Para HTML, verificar autenticação
-    if (path.endsWith('.html')) {
-      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
-    }
-  }
-}));
+app.use(express.static('public'));
 
 // Função para sincronizar dados das tabelas fonte
 async function syncVendasMiguel() {
@@ -168,10 +127,10 @@ async function syncVendasMiguel() {
   }
 }
 
-// API Endpoints (protegidos por autenticação)
+// API Endpoints
 
 // GET /api/sync - Sincronizar dados
-app.get('/api/sync', requireAuth, async (req, res) => {
+app.get('/api/sync', async (req, res) => {
   try {
     const result = await syncVendasMiguel();
     res.json(result);
@@ -181,7 +140,7 @@ app.get('/api/sync', requireAuth, async (req, res) => {
 });
 
 // GET /api/vendas - Listar todas as vendas do Miguel
-app.get('/api/vendas', requireAuth, async (req, res) => {
+app.get('/api/vendas', async (req, res) => {
   try {
     // Sincronizar antes de buscar
     await syncVendasMiguel();
@@ -201,7 +160,7 @@ app.get('/api/vendas', requireAuth, async (req, res) => {
 });
 
 // GET /api/dashboard - Dashboard com estatísticas
-app.get('/api/dashboard', requireAuth, async (req, res) => {
+app.get('/api/dashboard', async (req, res) => {
   try {
     await syncVendasMiguel();
 
