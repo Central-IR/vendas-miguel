@@ -254,9 +254,6 @@ function updateTable() {
                 <td>
                     <span class="badge ${statusClass}">${status}</span>
                 </td>
-                <td>
-                    <span class="badge origem-${venda.origem.toLowerCase()}">${formatOrigem(venda.origem)}</span>
-                </td>
                 <td class="actions-cell">
                     <div class="actions">
                         <button onclick="viewVenda('${venda.id}')" class="action-btn view" title="Ver detalhes">Ver</button>
