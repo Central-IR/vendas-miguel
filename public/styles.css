@@ -97,10 +97,10 @@ body {
 
 .app-content {
     opacity: 0;
-    animation: contentFadeIn 0.5s ease 2.8s forwards;
+    animation: quickFadeIn 0.4s ease forwards; /* MUDE de contentFadeIn 0.5s ease 2.8s */
 }
 
-@keyframes contentFadeIn {
+@keyframes quickFadeIn { /* ADICIONE esta nova animação */
     to { opacity: 1; }
 }
 
