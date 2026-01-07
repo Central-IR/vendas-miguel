@@ -225,7 +225,6 @@ function updateTable() {
         filteredVendas = filteredVendas.filter(v => {
             if (filterStatus === 'PAGO') return v.origem === 'CONTAS_RECEBER' && v.data_pagamento;
             if (filterStatus === 'ENTREGUE') return v.origem === 'CONTROLE_FRETE' && v.status_frete === 'ENTREGUE';
-            if (filterStatus === 'EM_ANDAMENTO') return v.origem === 'CONTROLE_FRETE' && v.status_frete !== 'ENTREGUE';
             return true;
         });
     }
