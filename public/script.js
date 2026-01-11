@@ -1,182 +1,42 @@
-const API_URL = window.location.origin + '/api';
-const PORTAL_URL = 'https://ir-comercio-portal-zcan.onrender.com';
-const DEVELOPMENT_MODE = true;
+// CONFIGURAÇÃO
+const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
+    ? 'http://localhost:10000/api'
+    : `${window.location.origin}/api`;
 
+let vendas = [];
 let isOnline = false;
-let lastDataHash = '';
 let currentMonth = new Date();
-let allVendas = [];
-let sessionToken = null;
 let calendarYear = new Date().getFullYear();
+
+const meses = [
+    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
+];
 
 console.log('🚀 Vendas Miguel iniciada');
 console.log('📍 API URL:', API_URL);
 
-// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
-    if (DEVELOPMENT_MODE) {
-        sessionToken = 'dev-mode';
-    } else {
-        const urlParams = new URLSearchParams(window.location.search);
-        sessionToken = urlParams.get('sessionToken') || sessionStorage.getItem('vendasMiguelSession');
-        
-        if (!sessionToken) {
-            mostrarMensagemNaoAutorizado();
-            return;
-        }
-        
-        if (urlParams.get('sessionToken')) {
-            sessionStorage.setItem('vendasMiguelSession', sessionToken);
-        }
-    }
-    
     inicializarApp();
 });
 
-function mostrarMensagemNaoAutorizado() {
-    document.body.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #1a1a1a; color: white; text-align: center; padding: 2rem;">
-            <h1 style="font-size: 3rem; margin-bottom: 1rem; color: #CC7000;">NÃO AUTORIZADO</h1>
-            <p style="font-size: 1.2rem; color: #999; margin-bottom: 2rem;">Acesso restrito. Por favor, faça login no portal.</p>
-            <a href="${PORTAL_URL}" style="background: #CC7000; color: white; padding: 1rem 2rem; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1.1rem;">Ir para o Portal</a>
-        </div>
-    `;
-}
-
 function inicializarApp() {
-    checkServerStatus();
-    loadVendas();
-    updateMonthDisplay();
-    setInterval(checkServerStatus, 15000);
-    setInterval(loadVendas, 30000);
-}
-
-function updateMonthDisplay() {
-    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    const monthStr = `${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
-    const elem = document.getElementById('currentMonth');
-    if (elem) elem.textContent = monthStr;
-}
-
-function changeMonth(direction) {
-    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + direction, 1);
-    updateMonthDisplay();
     updateDisplay();
-}
-
-function toggleCalendar() {
-    const modal = document.getElementById('calendarModal');
-    if (!modal) return;
-    
-    if (modal.classList.contains('show')) {
-        modal.classList.remove('show');
-    } else {
-        calendarYear = currentMonth.getFullYear();
-        renderCalendar();
-        modal.classList.add('show');
-    }
-}
-
-function changeCalendarYear(direction) {
-    calendarYear += direction;
+    checkServerStatus();
+    setInterval(checkServerStatus, 15000);
+    startPolling();
     renderCalendar();
 }
 
-function renderCalendar() {
-    const yearElement = document.getElementById('calendarYear');
-    const monthsContainer = document.getElementById('calendarMonths');
-    
-    if (!yearElement || !monthsContainer) return;
-    
-    yearElement.textContent = calendarYear;
-    
-    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    
-    monthsContainer.innerHTML = '';
-    
-    monthNames.forEach((name, index) => {
-        const monthButton = document.createElement('div');
-        monthButton.className = 'calendar-month';
-        monthButton.textContent = name;
-        
-        if (calendarYear === currentMonth.getFullYear() && index === currentMonth.getMonth()) {
-            monthButton.classList.add('current');
-        }
-        
-        monthButton.onclick = () => selectMonth(index);
-        monthsContainer.appendChild(monthButton);
-    });
-}
-
-function selectMonth(monthIndex) {
-    currentMonth = new Date(calendarYear, monthIndex, 1);
-    updateMonthDisplay();
-    updateDisplay();
-    toggleCalendar();
-}
-
-function toggleChartModal() {
-    const modal = document.getElementById('chartModal');
-    if (!modal) return;
-    
-    if (modal.classList.contains('show')) {
-        modal.classList.remove('show');
-    } else {
-        calculateAnnualStats();
-        modal.classList.add('show');
-    }
-}
-
-function calculateAnnualStats() {
-    const year = currentMonth.getFullYear();
-    const yearElem = document.getElementById('chartYear');
-    if (yearElem) yearElem.textContent = year;
-    
-    const yearVendas = allVendas.filter(v => {
-        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
-        return dataEmissao.getFullYear() === year;
-    });
-    
-    let faturado = 0;
-    let pago = 0;
-    
-    yearVendas.forEach(venda => {
-        const valor = parseFloat(venda.valor_nf) || 0;
-        faturado += valor;
-        
-        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
-            pago += valor;
-        }
-    });
-    
-    const pendente = faturado - pago;
-    
-    const faturadoElem = document.getElementById('chartFaturado');
-    const pagoElem = document.getElementById('chartPago');
-    const pendenteElem = document.getElementById('chartPendente');
-    
-    if (faturadoElem) faturadoElem.textContent = formatCurrency(faturado);
-    if (pagoElem) pagoElem.textContent = formatCurrency(pago);
-    if (pendenteElem) pendenteElem.textContent = formatCurrency(pendente);
-}
-
-document.addEventListener('click', (e) => {
-    const calendarModal = document.getElementById('calendarModal');
-    const chartModal = document.getElementById('chartModal');
-    
-    if (calendarModal && e.target === calendarModal) {
-        calendarModal.classList.remove('show');
-    }
-    if (chartModal && e.target === chartModal) {
-        chartModal.classList.remove('show');
-    }
-});
-
+// STATUS DO SERVIDOR
 async function checkServerStatus() {
     try {
-        const response = await fetch(`${API_URL}/../health`);
+        const response = await fetch(`${API_URL}/vendas`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            mode: 'cors'
+        });
+
         const wasOffline = !isOnline;
         isOnline = response.ok;
         
@@ -188,7 +48,7 @@ async function checkServerStatus() {
         updateConnectionStatus();
         return isOnline;
     } catch (error) {
-        console.error('❌ Erro ao verificar servidor:', error);
+        console.error('❌ Erro ao verificar servidor:', error.message);
         isOnline = false;
         updateConnectionStatus();
         return false;
@@ -202,269 +62,466 @@ function updateConnectionStatus() {
     }
 }
 
-async function syncData() {
-    if (!isOnline) {
-        showToast('Sistema offline', 'error');
-        return;
-    }
-
-    showToast('Sincronizando...', 'success');
-    
-    try {
-        const response = await fetch(`${API_URL}/sync`);
-        if (!response.ok) throw new Error('Erro na sincronização');
-        
-        await loadVendas();
-        showToast('Dados sincronizados!', 'success');
-    } catch (error) {
-        console.error('Erro ao sincronizar:', error);
-        showToast('Erro ao sincronizar', 'error');
-    }
-}
-
+// CARREGAR VENDAS
 async function loadVendas() {
     if (!isOnline) return;
 
     try {
-        const response = await fetch(`${API_URL}/vendas`);
-        if (!response.ok) throw new Error('Erro ao carregar vendas');
+        const timestamp = new Date().getTime();
+        const response = await fetch(`${API_URL}/vendas?_t=${timestamp}`, {
+            method: 'GET',
+            headers: { 
+                'Accept': 'application/json',
+                'Cache-Control': 'no-cache'
+            },
+            mode: 'cors'
+        });
+
+        if (!response.ok) return;
 
         const data = await response.json();
-        allVendas = data;
+        vendas = data;
         
-        const newHash = JSON.stringify(allVendas.map(v => v.id));
-        if (newHash !== lastDataHash) {
-            lastDataHash = newHash;
-            updateDisplay();
-        }
-
-        await loadDashboard();
+        await updateDashboard();
+        filterVendas();
+        console.log(`✅ ${vendas.length} vendas carregadas`);
     } catch (error) {
         console.error('❌ Erro ao carregar vendas:', error);
     }
 }
 
-async function loadDashboard() {
+function startPolling() {
+    loadVendas();
+    setInterval(() => {
+        if (isOnline) loadVendas();
+    }, 30000); // 30 segundos
+}
+
+// DASHBOARD - VALORES UNIVERSAIS (todos os meses)
+async function updateDashboard() {
     try {
-        const monthVendas = allVendas.filter(v => {
-            const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
-            return dataEmissao.getMonth() === currentMonth.getMonth() && 
-                   dataEmissao.getFullYear() === currentMonth.getFullYear();
+        const response = await fetch(`${API_URL}/dashboard`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' },
+            mode: 'cors'
         });
 
-        const stats = {
-            pago: 0,
-            aReceber: 0,
-            entregue: 0,
-            faturado: 0
-        };
+        if (!response.ok) return;
 
-        monthVendas.forEach(venda => {
-            const valor = parseFloat(venda.valor_nf) || 0;
-            stats.faturado += valor;
+        const stats = await response.json();
 
-            if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
-                stats.pago += valor;
-            } else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
-                stats.aReceber += valor;
-                stats.entregue += 1;
-            }
-        });
+        document.getElementById('totalPago').textContent = 
+            `R$ ${stats.pago.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         
-        const pagoElem = document.getElementById('totalPago');
-        const receberElem = document.getElementById('totalAReceber');
-        const entregueElem = document.getElementById('totalEntregue');
-        const faturadoElem = document.getElementById('totalFaturado');
+        document.getElementById('totalAReceber').textContent = 
+            `R$ ${stats.aReceber.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
         
-        if (pagoElem) pagoElem.textContent = formatCurrency(stats.pago);
-        if (receberElem) receberElem.textContent = formatCurrency(stats.aReceber);
-        if (entregueElem) entregueElem.textContent = stats.entregue;
-        if (faturadoElem) faturadoElem.textContent = formatCurrency(stats.faturado);
+        document.getElementById('totalEntregue').textContent = stats.entregue;
+        
+        document.getElementById('totalFaturado').textContent = 
+            `R$ ${stats.faturado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
     } catch (error) {
-        console.error('❌ Erro ao carregar dashboard:', error);
+        console.error('❌ Erro ao atualizar dashboard:', error);
     }
 }
 
-function filterVendas() {
-    updateTable();
-}
-
+// NAVEGAÇÃO POR MESES
 function updateDisplay() {
-    updateTable();
-    loadDashboard();
+    const display = document.getElementById('currentMonth');
+    if (display) {
+        display.textContent = `${meses[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
+    }
+    filterVendas();
 }
 
-function updateTable() {
-    const container = document.getElementById('vendasContainer');
-    if (!container) return;
+window.changeMonth = function(direction) {
+    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + direction, 1);
+    updateDisplay();
+};
+
+// FILTRAR VENDAS
+window.filterVendas = function() {
+    const searchTerm = document.getElementById('search').value.toLowerCase();
+    const filterStatus = document.getElementById('filterStatus').value;
     
-    const monthVendas = allVendas.filter(v => {
+    const filtrados = vendas.filter(v => {
+        // Filtrar por mês atual
         const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
-        return dataEmissao.getMonth() === currentMonth.getMonth() && 
-               dataEmissao.getFullYear() === currentMonth.getFullYear();
+        const matchMes = dataEmissao.getMonth() === currentMonth.getMonth() && 
+                         dataEmissao.getFullYear() === currentMonth.getFullYear();
+        
+        if (!matchMes) return false;
+        
+        // Filtrar por busca
+        const matchSearch = !searchTerm || 
+            v.numero_nf?.toString().includes(searchTerm) ||
+            v.nome_orgao?.toLowerCase().includes(searchTerm);
+        
+        // Filtrar por status
+        let matchStatus = true;
+        if (filterStatus === 'PAGO') {
+            matchStatus = v.is_pago === true;
+        } else if (filterStatus === 'ENTREGUE') {
+            matchStatus = v.is_pago === false && v.status_frete === 'ENTREGUE';
+        } else if (filterStatus === 'EM TRÂNSITO') {
+            matchStatus = v.is_pago === false && v.status_frete === 'EM TRÂNSITO';
+        } else if (filterStatus === 'SIMPLES REMESSA') {
+            matchStatus = v.is_pago === false && v.status_frete === 'SIMPLES REMESSA';
+        } else if (filterStatus === 'REMESSA DE AMOSTRA') {
+            matchStatus = v.is_pago === false && v.status_frete === 'REMESSA DE AMOSTRA';
+        }
+        
+        return matchSearch && matchStatus;
     });
-    
-    let filteredVendas = [...monthVendas];
-    
-    const searchElem = document.getElementById('search');
-    const filterStatusElem = document.getElementById('filterStatus');
-    
-    const search = searchElem ? searchElem.value.toLowerCase() : '';
-    const filterStatus = filterStatusElem ? filterStatusElem.value : '';
-    
-    if (search) {
-        filteredVendas = filteredVendas.filter(v => 
-            (v.numero_nf || '').toLowerCase().includes(search) ||
-            (v.nome_orgao || '').toLowerCase().includes(search)
-        );
-    }
-    
-    if (filterStatus) {
-        filteredVendas = filteredVendas.filter(v => {
-            if (filterStatus === 'PAGO') return v.origem === 'CONTAS_RECEBER' && v.data_pagamento;
-            if (v.origem === 'CONTROLE_FRETE') return v.status_frete === filterStatus;
-            return false;
-        });
-    }
-    
-    if (filteredVendas.length === 0) {
-        container.innerHTML = `
+
+    renderTable(filtrados);
+};
+
+// RENDERIZAR TABELA
+function renderTable(vendasExibir) {
+    const tbody = document.getElementById('vendasContainer');
+    if (!tbody) return;
+
+    if (vendasExibir.length === 0) {
+        tbody.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; padding: 2rem;">
+                <td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
                     Nenhuma venda encontrada
                 </td>
             </tr>
         `;
         return;
     }
-    
-    container.innerHTML = filteredVendas.map(venda => {
-        const status = getStatus(venda);
-        let statusClass = '';
+
+    tbody.innerHTML = vendasExibir.map(v => {
+        // Classe para linhas pagas (verde)
+        const rowClass = v.is_pago ? 'row-pago' : '';
         
-        if (status === 'PAGO') {
-            statusClass = 'pago';
-        } else if (status === 'ENTREGUE') {
-            statusClass = 'entregue';
-        } else if (status === 'EM_TRANSITO') {
-            statusClass = 'transito';
-        } else if (status === 'AGUARDANDO_COLETA') {
-            statusClass = 'aguardando';
-        } else if (status === 'EXTRAVIADO') {
-            statusClass = 'extraviado';
-        } else if (status === 'DEVOLVIDO') {
-            statusClass = 'devolvido';
+        // Status - mostrar status correto baseado na origem
+        let statusBadge = '';
+        if (v.is_pago) {
+            // Vem do Contas a Receber - PAGO
+            statusBadge = '<span class="badge entregue">PAGO</span>';
+        } else if (v.origem === 'CONTROLE_FRETE') {
+            // Vem do Controle de Frete - mostrar status do frete
+            if (v.status_frete === 'ENTREGUE') {
+                statusBadge = '<span class="badge entregue">ENTREGUE</span>';
+            } else if (v.status_frete === 'EM TRÂNSITO') {
+                statusBadge = '<span class="badge transito">EM TRÂNSITO</span>';
+            } else if (v.status_frete === 'SIMPLES REMESSA') {
+                statusBadge = '<span class="badge info">SIMPLES REMESSA</span>';
+            } else if (v.status_frete === 'REMESSA DE AMOSTRA') {
+                statusBadge = '<span class="badge warning">REMESSA DE AMOSTRA</span>';
+            } else {
+                statusBadge = `<span class="badge">${v.status_frete || '-'}</span>`;
+            }
         }
-        
+
         return `
-            <tr class="${status === 'PAGO' ? 'row-pago' : ''}">
-                <td><strong>${venda.numero_nf}</strong></td>
-                <td style="white-space: nowrap;">${formatDate(venda.data_emissao)}</td>
-                <td>${venda.nome_orgao}</td>
-                <td><strong>${formatCurrency(venda.valor_nf)}</strong></td>
-                <td>${venda.tipo_nf || '-'}</td>
-                <td>
-                    <span class="badge ${statusClass}">${status.replace(/_/g, ' ')}</span>
-                </td>
-                <td class="actions-cell">
-                    <div class="actions">
-                        <button onclick="viewVenda('${venda.id}')" class="action-btn view" title="Ver detalhes">Ver</button>
-                    </div>
+            <tr class="${rowClass}">
+                <td><strong>${v.numero_nf || '-'}</strong></td>
+                <td>${formatDate(v.data_emissao)}</td>
+                <td>${v.nome_orgao || '-'}</td>
+                <td><strong>R$ ${parseFloat(v.valor_nf || 0).toFixed(2)}</strong></td>
+                <td>${v.tipo_nf || '-'}</td>
+                <td>${statusBadge}</td>
+                <td class="actions-cell" style="text-align: center;">
+                    <button onclick="viewVenda('${v.id}')" class="action-btn view">Ver</button>
                 </td>
             </tr>
         `;
     }).join('');
 }
 
-function getStatus(venda) {
-    if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
-        return 'PAGO';
-    }
-    if (venda.origem === 'CONTROLE_FRETE') {
-        // Retornar o status real do frete
-        return venda.status_frete || 'EM_TRANSITO';
-    }
-    return 'EM_TRANSITO';
-}
-
-function viewVenda(id) {
-    const venda = allVendas.find(v => v.id === id);
-    if (!venda) return;
-    
-    const nfElem = document.getElementById('modalNumeroNF');
-    if (nfElem) nfElem.textContent = venda.numero_nf;
-    
-    const modalBody = document.getElementById('modalBody');
-    if (!modalBody) return;
-    
-    if (venda.origem === 'CONTAS_RECEBER') {
-        modalBody.innerHTML = `
-            <div class="info-section">
-                <h4>Informações da Conta</h4>
-                <p><strong>Número NF:</strong> ${venda.numero_nf}</p>
-                <p><strong>Órgão:</strong> ${venda.nome_orgao}</p>
-                <p><strong>Valor:</strong> ${formatCurrency(venda.valor_nf)}</p>
-                <p><strong>Data Emissão:</strong> ${formatDate(venda.data_emissao)}</p>
-                <p><strong>Data Vencimento:</strong> ${formatDate(venda.data_vencimento)}</p>
-                <p><strong>Data Pagamento:</strong> ${venda.data_pagamento ? formatDate(venda.data_pagamento) : '-'}</p>
-                <p><strong>Banco:</strong> ${venda.banco || '-'}</p>
-                <p><strong>Status:</strong> <span class="badge pago">${venda.status_pagamento}</span></p>
-                ${venda.observacoes ? `<p><strong>Observações:</strong> ${venda.observacoes}</p>` : ''}
-            </div>
-        `;
-    } else {
-        modalBody.innerHTML = `
-            <div class="info-section">
-                <h4>Informações do Frete</h4>
-                <p><strong>Número NF:</strong> ${venda.numero_nf}</p>
-                <p><strong>Órgão:</strong> ${venda.nome_orgao}</p>
-                <p><strong>Valor NF:</strong> ${formatCurrency(venda.valor_nf)}</p>
-                <p><strong>Data Emissão:</strong> ${formatDate(venda.data_emissao)}</p>
-                ${venda.documento ? `<p><strong>Documento:</strong> ${venda.documento}</p>` : ''}
-                ${venda.contato_orgao ? `<p><strong>Contato:</strong> ${venda.contato_orgao}</p>` : ''}
-                <p><strong>Transportadora:</strong> ${venda.transportadora || '-'}</p>
-                <p><strong>Valor Frete:</strong> ${formatCurrency(venda.valor_frete)}</p>
-                ${venda.data_coleta ? `<p><strong>Data Coleta:</strong> ${formatDate(venda.data_coleta)}</p>` : ''}
-                ${venda.cidade_destino ? `<p><strong>Cidade Destino:</strong> ${venda.cidade_destino}</p>` : ''}
-                ${venda.previsao_entrega ? `<p><strong>Previsão Entrega:</strong> ${formatDate(venda.previsao_entrega)}</p>` : ''}
-                <p><strong>Status:</strong> <span class="badge entregue">${venda.status_frete}</span></p>
-            </div>
-        `;
-    }
-    
-    const modal = document.getElementById('infoModal');
-    if (modal) modal.classList.add('show');
-}
-
-function closeInfoModal() {
-    const modal = document.getElementById('infoModal');
-    if (modal) modal.classList.remove('show');
-}
-
+// FORMATAR DATA
 function formatDate(dateString) {
     if (!dateString) return '-';
     const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('pt-BR');
 }
 
-function formatCurrency(value) {
-    if (!value) return 'R$ 0,00';
-    const num = parseFloat(value);
-    return `R$ ${num.toFixed(2).replace('.', ',')}`;
+// VER DETALHES
+window.viewVenda = function(id) {
+    const venda = vendas.find(v => String(v.id) === String(id));
+    if (!venda) {
+        showToast('Venda não encontrada', 'error');
+        return;
+    }
+
+    // Montar detalhes baseado na origem
+    let detalhesHTML = '';
+    
+    if (venda.origem === 'CONTAS_RECEBER') {
+        // Exibir informações do Contas a Receber
+        detalhesHTML = `
+            <div class="info-line">
+                <span class="info-label">Origem:</span>
+                <span class="info-value"><strong>Contas a Receber (PAGO)</strong></span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Nº NF:</span>
+                <span class="info-value"><strong>${venda.numero_nf}</strong></span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Data Emissão:</span>
+                <span class="info-value">${formatDate(venda.data_emissao)}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Órgão:</span>
+                <span class="info-value">${venda.nome_orgao || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Valor NF:</span>
+                <span class="info-value"><strong>R$ ${parseFloat(venda.valor_nf || 0).toFixed(2)}</strong></span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Tipo NF:</span>
+                <span class="info-value">${venda.tipo_nf || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Banco:</span>
+                <span class="info-value">${venda.banco || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Data Vencimento:</span>
+                <span class="info-value">${formatDate(venda.data_vencimento)}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Data Pagamento:</span>
+                <span class="info-value" style="color: var(--success-color); font-weight: 700;">${formatDate(venda.data_pagamento)}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Observações:</span>
+                <span class="info-value">${venda.observacoes || '-'}</span>
+            </div>
+        `;
+    } else {
+        // Exibir informações do Controle de Frete
+        detalhesHTML = `
+            <div class="info-line">
+                <span class="info-label">Origem:</span>
+                <span class="info-value"><strong>Controle de Frete (ENTREGUE)</strong></span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Nº NF:</span>
+                <span class="info-value"><strong>${venda.numero_nf}</strong></span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Data Emissão:</span>
+                <span class="info-value">${formatDate(venda.data_emissao)}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Documento:</span>
+                <span class="info-value">${venda.documento || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Valor NF:</span>
+                <span class="info-value"><strong>R$ ${parseFloat(venda.valor_nf || 0).toFixed(2)}</strong></span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Tipo NF:</span>
+                <span class="info-value">${venda.tipo_nf || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Órgão:</span>
+                <span class="info-value">${venda.nome_orgao || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Contato:</span>
+                <span class="info-value">${venda.contato_orgao || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Transportadora:</span>
+                <span class="info-value">${venda.transportadora || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Valor Frete:</span>
+                <span class="info-value">R$ ${parseFloat(venda.valor_frete || 0).toFixed(2)}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Data Coleta:</span>
+                <span class="info-value">${formatDate(venda.data_coleta)}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Cidade Destino:</span>
+                <span class="info-value">${venda.cidade_destino || '-'}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Previsão Entrega:</span>
+                <span class="info-value">${formatDate(venda.previsao_entrega)}</span>
+            </div>
+            <div class="info-line">
+                <span class="info-label">Status:</span>
+                <span class="info-value">${venda.status_frete || '-'}</span>
+            </div>
+        `;
+    }
+
+    const modal = document.getElementById('infoModal');
+    document.getElementById('modalNumeroNF').textContent = venda.numero_nf;
+    document.getElementById('modalBody').innerHTML = detalhesHTML;
+    modal.style.display = 'flex';
+};
+
+window.closeInfoModal = function() {
+    document.getElementById('infoModal').style.display = 'none';
+};
+
+// CALENDÁRIO
+function renderCalendar() {
+    const container = document.getElementById('calendarMonths');
+    if (!container) return;
+
+    document.getElementById('calendarYear').textContent = calendarYear;
+
+    container.innerHTML = meses.map((mes, index) => {
+        const isCurrentMonth = index === currentMonth.getMonth() && calendarYear === currentMonth.getFullYear();
+        return `
+            <button 
+                class="calendar-month-btn ${isCurrentMonth ? 'active' : ''}" 
+                onclick="selectMonth(${index})"
+            >
+                ${mes}
+            </button>
+        `;
+    }).join('');
 }
 
-function showToast(message, type = 'success') {
+window.selectMonth = function(monthIndex) {
+    currentMonth = new Date(calendarYear, monthIndex, 1);
+    updateDisplay();
+    toggleCalendar();
+};
+
+window.changeCalendarYear = function(direction) {
+    calendarYear += direction;
+    renderCalendar();
+};
+
+window.toggleCalendar = function() {
+    const modal = document.getElementById('calendarModal');
+    if (modal) {
+        modal.classList.toggle('show');
+    }
+};
+
+// SINCRONIZAÇÃO MANUAL
+window.syncData = async function() {
+    if (!isOnline) {
+        showToast('Sistema offline', 'error');
+        return;
+    }
+
+    try {
+        showToast('Sincronizando...', 'success');
+        
+        const response = await fetch(`${API_URL}/sync`, {
+            method: 'GET',
+            headers: { 'Accept': 'application/json' }
+        });
+
+        if (!response.ok) {
+            throw new Error('Erro ao sincronizar');
+        }
+
+        await loadVendas();
+        showToast('Dados sincronizados com sucesso', 'success');
+    } catch (error) {
+        console.error('Erro ao sincronizar:', error);
+        showToast('Erro ao sincronizar', 'error');
+    }
+};
+
+// RELATÓRIO MENSAL (apenas notas pagas)
+window.toggleRelatorioMes = function() {
+    const modal = document.getElementById('relatorioModal');
+    if (!modal) return;
+
+    if (modal.style.display === 'flex') {
+        modal.style.display = 'none';
+        return;
+    }
+
+    // Filtrar apenas notas PAGAS do mês atual pela DATA DE PAGAMENTO
+    const vendasPagas = vendas.filter(v => {
+        if (!v.is_pago || !v.data_pagamento) return false;
+
+        const dataPagamento = new Date(v.data_pagamento + 'T00:00:00');
+        return dataPagamento.getMonth() === currentMonth.getMonth() && 
+               dataPagamento.getFullYear() === currentMonth.getFullYear();
+    });
+
+    // Ordenar por data de pagamento
+    vendasPagas.sort((a, b) => {
+        const dateA = new Date(a.data_pagamento);
+        const dateB = new Date(b.data_pagamento);
+        return dateA - dateB;
+    });
+
+    const titulo = document.getElementById('relatorioModalTitulo');
+    const corpo = document.getElementById('relatorioModalBody');
+
+    titulo.textContent = `Relatório Mensal - ${meses[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
+
+    if (vendasPagas.length === 0) {
+        corpo.innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                Nenhum pagamento registrado neste mês
+            </div>
+        `;
+    } else {
+        corpo.innerHTML = `
+            <div style="overflow-x: auto;">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Nº NF</th>
+                            <th>Data Emissão</th>
+                            <th>Valor NF</th>
+                            <th>Data Pagamento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${vendasPagas.map(v => `
+                            <tr class="row-pago">
+                                <td><strong>${v.numero_nf}</strong></td>
+                                <td>${formatDate(v.data_emissao)}</td>
+                                <td><strong>R$ ${parseFloat(v.valor_nf || 0).toFixed(2)}</strong></td>
+                                <td style="color: var(--success-color); font-weight: 700;">${formatDate(v.data_pagamento)}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="2"><strong>Total do Mês</strong></td>
+                            <td colspan="2"><strong>R$ ${vendasPagas.reduce((sum, v) => sum + parseFloat(v.valor_nf || 0), 0).toFixed(2)}</strong></td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        `;
+    }
+
+    modal.style.display = 'flex';
+};
+
+window.closeRelatorioModal = function() {
+    document.getElementById('relatorioModal').style.display = 'none';
+};
+
+// TOAST
+function showToast(message, type) {
     const oldMessages = document.querySelectorAll('.floating-message');
     oldMessages.forEach(msg => msg.remove());
-    
+
     const messageDiv = document.createElement('div');
     messageDiv.className = `floating-message ${type}`;
     messageDiv.textContent = message;
-    
+
     document.body.appendChild(messageDiv);
-    
+
     setTimeout(() => {
-        messageDiv.style.animation = 'slideOutBottom 0.3s ease forwards';
+        messageDiv.style.animation = 'slideOut 0.3s ease forwards';
         setTimeout(() => messageDiv.remove(), 300);
     }, 3000);
 }
