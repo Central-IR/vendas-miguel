@@ -3,19 +3,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Vendas</title>
+    <title>Vendas Miguel</title>
+    <link rel="icon" type="image/png" href="I.R.-COMERCIO-E-MATERIAIS-ELETRICOS-PRETO.png">
     <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+    <!-- Splash Screen -->
     <div class="splash-screen" id="splashScreen">
-        <h1 class="splash-title">Vendas</h1>
+        <div class="loader"></div>
     </div>
 
     <div class="app-content">
         <div class="container">
             <div class="header">
                 <div class="header-left">
-                    <h1>Vendas</h1>
+                    <h1>Vendas Miguel</h1>
                     <div id="connectionStatus" class="connection-status offline">
                         <span class="status-dot"></span>
                     </div>
@@ -89,6 +91,9 @@
                                 <option value="">Todos os Status</option>
                                 <option value="PAGO">Pago</option>
                                 <option value="ENTREGUE">Entregue</option>
+                                <option value="EM TRÂNSITO">Em Trânsito</option>
+                                <option value="SIMPLES REMESSA">Simples Remessa</option>
+                                <option value="REMESSA DE AMOSTRA">Remessa de Amostra</option>
                             </select>
                             <svg class="dropdown-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <polyline points="6 9 12 15 18 9"></polyline>
@@ -226,7 +231,7 @@
         setTimeout(() => {
             const splash = document.getElementById('splashScreen');
             if (splash) splash.style.display = 'none';
-        }, 2000);
+        }, 3000);
     </script>
     <script src="script.js"></script>
 </body>
