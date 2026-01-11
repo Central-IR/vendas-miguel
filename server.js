@@ -13,48 +13,66 @@ const supabase = createClient(
 );
 
 // Middleware
-app.use(cors());
+app.use(cors({
+  origin: '*',
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token'],
+  credentials: false
+}));
+
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Session-Token');
+  
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 app.use(express.json());
 app.use(express.static('public'));
 
-// Função para sincronizar dados das tabelas fonte
+// Função para sincronizar dados do Miguel
 async function syncVendasMiguel() {
   try {
     console.log('🔄 Sincronizando dados do Miguel...');
 
-    // 1. Buscar todos os registros do Controle de Frete (Miguel)
+    // 1. Buscar TODOS os registros do Controle de Frete (Miguel) - NÃO filtrar por status
     const { data: freteData, error: freteError } = await supabase
       .from('controle_frete')
       .select('*')
       .eq('vendedor', 'MIGUEL')
-      .order('numero_nf', { ascending: true });
+      .order('data_emissao', { ascending: true });
 
     if (freteError) throw freteError;
 
-    // 2. Buscar todos os registros do Contas a Receber (Miguel)
+    // 2. Buscar TODOS registros do Contas a Receber (Miguel) que estão PAGOS
     const { data: contasData, error: contasError } = await supabase
       .from('contas_receber')
       .select('*')
       .eq('vendedor', 'MIGUEL')
-      .order('numero_nf', { ascending: true });
+      .eq('status', 'PAGO')
+      .order('data_emissao', { ascending: true });
 
     if (contasError) throw contasError;
 
-    // 3. Criar mapa de NFs pagas
+    // 3. Criar mapa de NFs pagas (CONTAS_RECEBER tem PRIORIDADE)
     const nfsPagas = new Map();
     if (contasData) {
       contasData.forEach(conta => {
-        if (conta.status === 'PAGO' && conta.data_pagamento) {
+        if (conta.data_pagamento) {
           nfsPagas.set(conta.numero_nf, conta);
         }
       });
     }
 
-    // 4. Processar registros
+    // 4. Processar registros com PRIORIZAÇÃO
     const registrosParaInserir = [];
     const nfsProcessadas = new Set();
 
-    // Prioridade 2: Contas pagas
+    // PRIORIDADE 1: Contas PAGAS do Contas a Receber (substituem fretes)
     nfsPagas.forEach((conta, numero_nf) => {
       registrosParaInserir.push({
         numero_nf: numero_nf,
@@ -70,12 +88,12 @@ async function syncVendasMiguel() {
         status_pagamento: conta.status,
         observacoes: conta.observacoes,
         id_contas_receber: conta.id,
-        prioridade: 2
+        is_pago: true
       });
       nfsProcessadas.add(numero_nf);
     });
 
-    // Prioridade 1: Todos os fretes (não apenas entregues)
+    // PRIORIDADE 2: TODOS os Fretes (apenas se NÃO estiver pago)
     if (freteData) {
       freteData.forEach(frete => {
         if (!nfsProcessadas.has(frete.numero_nf)) {
@@ -96,19 +114,27 @@ async function syncVendasMiguel() {
             previsao_entrega: frete.previsao_entrega,
             status_frete: frete.status,
             id_controle_frete: frete.id,
-            prioridade: 1
+            is_pago: false
           });
+          nfsProcessadas.add(frete.numero_nf);
         }
       });
     }
 
-    // 5. Limpar tabela vendas_miguel e inserir novos dados
+    // 5. Limpar tabela e inserir novos dados
     const { error: deleteError } = await supabase
       .from('vendas_miguel')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000'); // Deleta todos
+      .neq('id', '00000000-0000-0000-0000-000000000000');
 
     if (deleteError) console.error('Erro ao limpar tabela:', deleteError);
+
+    // Ordenar por data_emissao
+    registrosParaInserir.sort((a, b) => {
+      const dateA = new Date(a.data_emissao);
+      const dateB = new Date(b.data_emissao);
+      return dateA - dateB;
+    });
 
     if (registrosParaInserir.length > 0) {
       const { error: insertError } = await supabase
@@ -119,6 +145,9 @@ async function syncVendasMiguel() {
     }
 
     console.log(`✅ Sincronização concluída: ${registrosParaInserir.length} registros`);
+    console.log(`   - ${nfsPagas.size} pagas (verde)`);
+    console.log(`   - ${registrosParaInserir.length - nfsPagas.size} entregues`);
+    
     return { success: true, count: registrosParaInserir.length };
 
   } catch (error) {
@@ -126,8 +155,6 @@ async function syncVendasMiguel() {
     throw error;
   }
 }
-
-// API Endpoints
 
 // GET /api/sync - Sincronizar dados
 app.get('/api/sync', async (req, res) => {
@@ -139,16 +166,15 @@ app.get('/api/sync', async (req, res) => {
   }
 });
 
-// GET /api/vendas - Listar todas as vendas do Miguel
+// GET /api/vendas - Listar todas as vendas
 app.get('/api/vendas', async (req, res) => {
   try {
-    // Sincronizar antes de buscar
     await syncVendasMiguel();
 
     const { data, error } = await supabase
       .from('vendas_miguel')
       .select('*')
-      .order('numero_nf', { ascending: true });
+      .order('data_emissao', { ascending: true });
 
     if (error) throw error;
 
@@ -159,7 +185,7 @@ app.get('/api/vendas', async (req, res) => {
   }
 });
 
-// GET /api/dashboard - Dashboard com estatísticas
+// GET /api/dashboard - Dashboard com estatísticas UNIVERSAIS (todos os meses)
 app.get('/api/dashboard', async (req, res) => {
   try {
     await syncVendasMiguel();
@@ -178,14 +204,20 @@ app.get('/api/dashboard', async (req, res) => {
     };
 
     if (data) {
+      // Set para contar NFs únicas
+      const nfsUnicas = new Set();
+
       data.forEach(venda => {
         const valor = parseFloat(venda.valor_nf) || 0;
         
-        // Faturado = tudo
-        stats.faturado += valor;
+        // Faturado = cada NF única conta uma vez
+        if (!nfsUnicas.has(venda.numero_nf)) {
+          stats.faturado += valor;
+          nfsUnicas.add(venda.numero_nf);
+        }
 
-        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
-          // Pago
+        if (venda.is_pago && venda.data_pagamento) {
+          // Pago (verde)
           stats.pago += valor;
         } else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
           // A receber (entregue mas não pago)
