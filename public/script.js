@@ -220,19 +220,38 @@ function toggleRelatorioMes() {
                 <td><strong>${venda.numero_nf || '-'}</strong></td>
                 <td>${formatDate(venda.data_emissao)}</td>
                 <td>${venda.nome_orgao || '-'}</td>
+                <td><strong>R$ ${parseFloat(venda.valor_nf || 0).toFixed(2).replace('.', ',')}</strong></td>
                 <td>${formatDate(venda.data_pagamento)}</td>
+                <td>${venda.banco || '-'}</td>
             </tr>
         `).join('');
         
+        const totalPago = vendasPagas.reduce((sum, v) => sum + parseFloat(v.valor_nf || 0), 0);
+        
         modalBody.innerHTML = `
+            <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.3);">
+                <div style="display: flex; justify-content: space-between; align-items: center;">
+                    <div>
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Total Pago no Período</p>
+                        <p style="color: #15803D; font-size: 1.75rem; font-weight: 700; margin: 0.25rem 0 0 0;">R$ ${totalPago.toFixed(2).replace('.', ',')}</p>
+                    </div>
+                    <div style="text-align: right;">
+                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Quantidade de NFsn</p>
+                        <p style="color: #15803D; font-size: 1.75rem; font-weight: 700; margin: 0.25rem 0 0 0;">${vendasPagas.length}</p>
+                    </div>
+                </div>
+            </div>
+            
             <div style="overflow-x: auto;">
                 <table style="width: 100%; border-collapse: collapse;">
                     <thead>
-                        <tr style="background: var(--bg-secondary); border-bottom: 2px solid var(--border-color);">
-                            <th style="padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase;">Nº NF</th>
-                            <th style="padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase;">Data Emissão</th>
-                            <th style="padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase;">Órgão</th>
-                            <th style="padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase;">Data Pagamento</th>
+                        <tr style="background: var(--th-bg); color: var(--th-color);">
+                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Nº NF</th>
+                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Emissão</th>
+                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Órgão</th>
+                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Valor</th>
+                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Pagamento</th>
+                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Banco</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -248,92 +267,13 @@ function toggleRelatorioMes() {
 
 function closeRelatorioModal() {
     const modal = document.getElementById('relatorioModal');
-    if (modal) {
-        modal.classList.remove('show');
-    }
-}
-
-window.closeRelatorioModal = closeRelatorioModal;
-
-function updateRelatorioMes() {
-    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    const monthName = months[currentMonth.getMonth()];
-    const year = currentMonth.getFullYear();
-    
-    document.getElementById('relatorioMesNome').textContent = `${monthName} ${year}`;
-    
-    // Filtrar apenas vendas PAGAS do mês atual
-    let vendasPagas = vendas.filter(v => {
-        if (!v.data_pagamento || v.status_pagamento !== 'PAGO') return false;
-        
-        const dataPag = new Date(v.data_pagamento);
-        return dataPag.getMonth() === currentMonth.getMonth() &&
-               dataPag.getFullYear() === currentMonth.getFullYear();
-    });
-    
-    // Aplicar filtro de pesquisa
-    const search = document.getElementById('searchRelatorio').value.toLowerCase();
-    if (search) {
-        vendasPagas = vendasPagas.filter(v => 
-            (v.numero_nf || '').toLowerCase().includes(search) ||
-            (v.nome_orgao || '').toLowerCase().includes(search)
-        );
-    }
-    
-    // Ordenar por data de pagamento (crescente)
-    vendasPagas.sort((a, b) => new Date(a.data_pagamento) - new Date(b.data_pagamento));
-    
-    const container = document.getElementById('relatorioContainer');
-    
-    if (vendasPagas.length === 0) {
-        container.innerHTML = `
-            <tr>
-                <td colspan="6" style="text-align: center; padding: 2rem;">
-                    Nenhuma venda paga encontrada neste mês
-                </td>
-            </tr>
-        `;
-        document.getElementById('relatorioTotal').textContent = 'R$ 0,00';
-        return;
-    }
-    
-    let totalMes = 0;
-    container.innerHTML = vendasPagas.map(venda => {
-        const valor = parseFloat(venda.valor_nf || 0);
-        totalMes += valor;
-        
-        return `
-            <tr>
-                <td>${venda.numero_nf || '-'}</td>
-                <td>${formatDate(venda.data_emissao)}</td>
-                <td>${venda.nome_orgao || '-'}</td>
-                <td><strong>R$ ${valor.toFixed(2).replace('.', ',')}</strong></td>
-                <td>${formatDate(venda.previsao_entrega)}</td>
-                <td>${formatDate(venda.data_pagamento)}</td>
-            </tr>
-        `;
-    }).join('');
-    
-    document.getElementById('relatorioTotal').textContent = `R$ ${totalMes.toFixed(2).replace('.', ',')}`;
-}
-
-function filterRelatorio() {
-    updateRelatorioMes();
-}
-
-function filterVendas() {
-    updateTable();
+    if (modal) modal.classList.remove('show');
 }
 
 function updateDisplay() {
-    if (relatorioMode) {
-        updateRelatorioMes();
-    } else {
-        updateMonthDisplay();
-        updateDashboard();
-        updateTable();
-    }
+    updateMonthDisplay();
+    updateDashboard();
+    updateTable();
 }
 
 function updateDashboard() {
@@ -372,7 +312,6 @@ function updateDashboard() {
     document.getElementById('totalAReceber').textContent = formatCurrency(totalAReceber);
     document.getElementById('totalEntregue').textContent = quantidadeEntregue;
     document.getElementById('totalFaturado').textContent = formatCurrency(totalFaturado);
-}
 }
 
 function updateTable() {
@@ -447,6 +386,10 @@ function getVendasForCurrentMonth() {
         return vendaDate.getMonth() === currentMonth.getMonth() &&
                vendaDate.getFullYear() === currentMonth.getFullYear();
     });
+}
+
+function filterVendas() {
+    updateTable();
 }
 
 function viewVenda(id) {
