@@ -20,6 +20,7 @@ app.use(cors({
   credentials: false
 }));
 
+// Headers adicionais de CORS
 app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
@@ -32,32 +33,14 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
+app.use(express.static('public'));
 
-// Servir arquivos estáticos
-app.use(express.static('./', {
-  index: 'index.html',
-  setHeaders: (res, path) => {
-    if (path.endsWith('.js')) {
-      res.setHeader('Content-Type', 'application/javascript');
-    } else if (path.endsWith('.css')) {
-      res.setHeader('Content-Type', 'text/css');
-    } else if (path.endsWith('.html')) {
-      res.setHeader('Content-Type', 'text/html');
-    }
-  }
-}));
-
-// Rota principal
-app.get('/', (req, res) => {
-  res.sendFile(__dirname + '/index.html');
-});
-
-// Função para sincronizar dados do Miguel
+// Função para sincronizar dados das tabelas fonte
 async function syncVendasMiguel() {
   try {
     console.log('🔄 Sincronizando dados do Miguel...');
 
-    // 1. Buscar TODOS os registros do Controle de Frete (Miguel) - NÃO filtrar por status
+    // 1. Buscar TODOS os registros do Controle de Frete (Miguel)
     const { data: freteData, error: freteError } = await supabase
       .from('controle_frete')
       .select('*')
@@ -66,7 +49,7 @@ async function syncVendasMiguel() {
 
     if (freteError) throw freteError;
 
-    // 2. Buscar TODOS registros do Contas a Receber (Miguel) que estão PAGOS
+    // 2. Buscar APENAS registros PAGOS do Contas a Receber (Miguel)
     const { data: contasData, error: contasError } = await supabase
       .from('contas_receber')
       .select('*')
@@ -76,7 +59,7 @@ async function syncVendasMiguel() {
 
     if (contasError) throw contasError;
 
-    // 3. Criar mapa de NFs pagas (CONTAS_RECEBER tem PRIORIDADE)
+    // 3. Criar mapa de NFs pagas (PRIORIDADE MÁXIMA)
     const nfsPagas = new Map();
     if (contasData) {
       contasData.forEach(conta => {
@@ -90,7 +73,7 @@ async function syncVendasMiguel() {
     const registrosParaInserir = [];
     const nfsProcessadas = new Set();
 
-    // PRIORIDADE 1: Contas PAGAS do Contas a Receber (substituem fretes)
+    // PRIORIDADE 1: Contas PAGAS (substituem fretes entregues)
     nfsPagas.forEach((conta, numero_nf) => {
       registrosParaInserir.push({
         numero_nf: numero_nf,
@@ -106,7 +89,8 @@ async function syncVendasMiguel() {
         status_pagamento: conta.status,
         observacoes: conta.observacoes,
         id_contas_receber: conta.id,
-        is_pago: true
+        prioridade: 1,
+        is_pago: true  // Flag para destacar em verde
       });
       nfsProcessadas.add(numero_nf);
     });
@@ -132,14 +116,15 @@ async function syncVendasMiguel() {
             previsao_entrega: frete.previsao_entrega,
             status_frete: frete.status,
             id_controle_frete: frete.id,
-            is_pago: false
+            prioridade: 2,
+            is_pago: false  // Não está pago
           });
           nfsProcessadas.add(frete.numero_nf);
         }
       });
     }
 
-    // 5. Limpar tabela e inserir novos dados
+    // 5. Limpar tabela vendas_miguel e inserir novos dados
     const { error: deleteError } = await supabase
       .from('vendas_miguel')
       .delete()
@@ -147,7 +132,7 @@ async function syncVendasMiguel() {
 
     if (deleteError) console.error('Erro ao limpar tabela:', deleteError);
 
-    // Ordenar por data_emissao
+    // Ordenar por data_emissao CRESCENTE
     registrosParaInserir.sort((a, b) => {
       const dateA = new Date(a.data_emissao);
       const dateB = new Date(b.data_emissao);
@@ -163,8 +148,8 @@ async function syncVendasMiguel() {
     }
 
     console.log(`✅ Sincronização concluída: ${registrosParaInserir.length} registros`);
-    console.log(`   - ${nfsPagas.size} pagas (verde)`);
-    console.log(`   - ${registrosParaInserir.length - nfsPagas.size} entregues`);
+    console.log(`   - ${nfsPagas.size} pagas (CONTAS_RECEBER)`);
+    console.log(`   - ${registrosParaInserir.length - nfsPagas.size} entregues (CONTROLE_FRETE)`);
     
     return { success: true, count: registrosParaInserir.length };
 
@@ -184,15 +169,16 @@ app.get('/api/sync', async (req, res) => {
   }
 });
 
-// GET /api/vendas - Listar todas as vendas
+// GET /api/vendas - Listar todas as vendas do Miguel
 app.get('/api/vendas', async (req, res) => {
   try {
+    // Sincronizar antes de buscar
     await syncVendasMiguel();
 
     const { data, error } = await supabase
       .from('vendas_miguel')
       .select('*')
-      .order('data_emissao', { ascending: true });
+      .order('numero_nf', { ascending: true });
 
     if (error) throw error;
 
@@ -203,7 +189,7 @@ app.get('/api/vendas', async (req, res) => {
   }
 });
 
-// GET /api/dashboard - Dashboard com estatísticas UNIVERSAIS (todos os meses)
+// GET /api/dashboard - Dashboard com estatísticas
 app.get('/api/dashboard', async (req, res) => {
   try {
     await syncVendasMiguel();
@@ -222,20 +208,14 @@ app.get('/api/dashboard', async (req, res) => {
     };
 
     if (data) {
-      // Set para contar NFs únicas
-      const nfsUnicas = new Set();
-
       data.forEach(venda => {
         const valor = parseFloat(venda.valor_nf) || 0;
         
-        // Faturado = cada NF única conta uma vez
-        if (!nfsUnicas.has(venda.numero_nf)) {
-          stats.faturado += valor;
-          nfsUnicas.add(venda.numero_nf);
-        }
+        // Faturado = tudo
+        stats.faturado += valor;
 
-        if (venda.is_pago && venda.data_pagamento) {
-          // Pago (verde)
+        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
+          // Pago
           stats.pago += valor;
         } else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
           // A receber (entregue mas não pago)
@@ -257,21 +237,6 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// 404 para rotas não encontradas
-app.use((req, res, next) => {
-  if (req.path.startsWith('/api/')) {
-    res.status(404).json({ error: 'Rota não encontrada' });
-  } else {
-    res.sendFile(__dirname + '/index.html');
-  }
-});
-
-// Tratamento de erros
-app.use((error, req, res, next) => {
-  console.error('Erro:', error);
-  res.status(500).json({ error: 'Erro interno do servidor' });
-});
-
 // Sincronização automática a cada 5 minutos
 setInterval(async () => {
   try {
@@ -288,5 +253,4 @@ syncVendasMiguel().catch(console.error);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`📊 Vendas Miguel - Sistema de Monitoramento`);
-  console.log(`🌐 Acesse: http://localhost:${PORT}`);
 });
