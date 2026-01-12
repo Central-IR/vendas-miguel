@@ -9,29 +9,11 @@ const PORT = process.env.PORT || 10000;
 // Supabase client
 const supabase = createClient(
   process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
+  process.env.SUPABASE_KEY
 );
 
 // Middleware
-app.use(cors({
-  origin: '*',
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Session-Token'],
-  credentials: false
-}));
-
-// Headers adicionais de CORS
-app.use((req, res, next) => {
-  res.header('Access-Control-Allow-Origin', '*');
-  res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
-  res.header('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Session-Token');
-  
-  if (req.method === 'OPTIONS') {
-    return res.sendStatus(200);
-  }
-  next();
-});
-
+app.use(cors());
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -40,92 +22,82 @@ async function syncVendasMiguel() {
   try {
     console.log('🔄 Sincronizando dados do Miguel...');
 
-    // 1. Buscar TODOS os registros do Controle de Frete (Miguel)
+    // 1. Buscar todos os registros do Controle de Frete (Miguel)
     const { data: freteData, error: freteError } = await supabase
       .from('controle_frete')
       .select('*')
       .eq('vendedor', 'MIGUEL')
-      .order('data_emissao', { ascending: true });
+      .order('numero_nf', { ascending: true });
 
-    if (freteError) {
-      console.error('Erro ao buscar controle_frete:', freteError);
-      throw freteError;
-    }
+    if (freteError) throw freteError;
 
-    // 2. Buscar APENAS registros PAGOS do Contas a Receber (Miguel)
+    // 2. Buscar todos os registros do Contas a Receber (Miguel)
     const { data: contasData, error: contasError } = await supabase
       .from('contas_receber')
       .select('*')
       .eq('vendedor', 'MIGUEL')
-      .eq('status', 'PAGO')
-      .order('data_emissao', { ascending: true });
+      .order('numero_nf', { ascending: true });
 
-    if (contasError) {
-      console.error('Erro ao buscar contas_receber:', contasError);
-      throw contasError;
-    }
+    if (contasError) throw contasError;
 
-    // 3. Criar mapa de NFs pagas (PRIORIDADE MÁXIMA)
+    // 3. Criar mapa de NFs pagas
     const nfsPagas = new Map();
-    if (contasData && contasData.length > 0) {
+    if (contasData) {
       contasData.forEach(conta => {
-        if (conta.data_pagamento && conta.numero_nf) {
+        if (conta.status === 'PAGO' && conta.data_pagamento) {
           nfsPagas.set(conta.numero_nf, conta);
         }
       });
     }
 
-    // 4. Processar registros com PRIORIZAÇÃO
+    // 4. Processar registros
     const registrosParaInserir = [];
     const nfsProcessadas = new Set();
 
-    // PRIORIDADE 1: Contas PAGAS (substituem fretes entregues)
+    // Prioridade 2: Contas pagas
     nfsPagas.forEach((conta, numero_nf) => {
       registrosParaInserir.push({
         numero_nf: numero_nf,
         origem: 'CONTAS_RECEBER',
         data_emissao: conta.data_emissao,
-        valor_nf: parseFloat(conta.valor) || 0,
-        tipo_nf: conta.tipo_nf || null,
-        nome_orgao: conta.orgao || null,
+        valor_nf: conta.valor,
+        tipo_nf: conta.tipo_nf,
+        nome_orgao: conta.orgao,
         vendedor: 'MIGUEL',
-        banco: conta.banco || null,
-        data_vencimento: conta.data_vencimento || null,
+        banco: conta.banco,
+        data_vencimento: conta.data_vencimento,
         data_pagamento: conta.data_pagamento,
-        status_pagamento: conta.status || 'PAGO',
-        observacoes: conta.observacoes || null,
+        status_pagamento: conta.status,
+        observacoes: conta.observacoes,
         id_contas_receber: conta.id,
-        prioridade: 1,
-        is_pago: true  // Flag para destacar em verde
+        prioridade: 2
       });
       nfsProcessadas.add(numero_nf);
     });
 
-    // PRIORIDADE 2: TODOS os Fretes (apenas se NÃO estiver pago)
-    if (freteData && freteData.length > 0) {
+    // Prioridade 1: Todos os fretes (não apenas entregues)
+    if (freteData) {
       freteData.forEach(frete => {
-        if (frete.numero_nf && !nfsProcessadas.has(frete.numero_nf)) {
+        if (!nfsProcessadas.has(frete.numero_nf)) {
           registrosParaInserir.push({
             numero_nf: frete.numero_nf,
             origem: 'CONTROLE_FRETE',
             data_emissao: frete.data_emissao,
-            valor_nf: parseFloat(frete.valor_nf) || 0,
-            tipo_nf: frete.tipo_nf || null,
-            nome_orgao: frete.nome_orgao || null,
+            valor_nf: frete.valor_nf,
+            tipo_nf: frete.tipo_nf,
+            nome_orgao: frete.nome_orgao,
             vendedor: 'MIGUEL',
-            documento: frete.documento || null,
-            contato_orgao: frete.contato_orgao || null,
-            transportadora: frete.transportadora || null,
-            valor_frete: frete.valor_frete ? parseFloat(frete.valor_frete) : null,
-            data_coleta: frete.data_coleta || null,
-            cidade_destino: frete.cidade_destino || null,
-            previsao_entrega: frete.previsao_entrega || null,
-            status_frete: frete.status || null,
+            documento: frete.documento,
+            contato_orgao: frete.contato_orgao,
+            transportadora: frete.transportadora,
+            valor_frete: frete.valor_frete,
+            data_coleta: frete.data_coleta,
+            cidade_destino: frete.cidade_destino,
+            previsao_entrega: frete.previsao_entrega,
+            status_frete: frete.status,
             id_controle_frete: frete.id,
-            prioridade: 2,
-            is_pago: false  // Não está pago
+            prioridade: 1
           });
-          nfsProcessadas.add(frete.numero_nf);
         }
       });
     }
@@ -134,45 +106,20 @@ async function syncVendasMiguel() {
     const { error: deleteError } = await supabase
       .from('vendas_miguel')
       .delete()
-      .neq('id', '00000000-0000-0000-0000-000000000000');
+      .neq('id', '00000000-0000-0000-0000-000000000000'); // Deleta todos
 
-    if (deleteError) {
-      console.error('⚠️ Aviso ao limpar tabela:', deleteError.message);
-    }
-
-    // Ordenar por data_emissao CRESCENTE
-    registrosParaInserir.sort((a, b) => {
-      const dateA = new Date(a.data_emissao);
-      const dateB = new Date(b.data_emissao);
-      return dateA - dateB;
-    });
+    if (deleteError) console.error('Erro ao limpar tabela:', deleteError);
 
     if (registrosParaInserir.length > 0) {
-      // Inserir em lotes de 100 para evitar timeout
-      const batchSize = 100;
-      for (let i = 0; i < registrosParaInserir.length; i += batchSize) {
-        const batch = registrosParaInserir.slice(i, i + batchSize);
-        const { error: insertError } = await supabase
-          .from('vendas_miguel')
-          .insert(batch);
+      const { error: insertError } = await supabase
+        .from('vendas_miguel')
+        .insert(registrosParaInserir);
 
-        if (insertError) {
-          console.error(`Erro ao inserir lote ${i / batchSize + 1}:`, insertError);
-          throw insertError;
-        }
-      }
+      if (insertError) throw insertError;
     }
 
     console.log(`✅ Sincronização concluída: ${registrosParaInserir.length} registros`);
-    console.log(`   - ${nfsPagas.size} pagas (CONTAS_RECEBER)`);
-    console.log(`   - ${registrosParaInserir.length - nfsPagas.size} não pagas (CONTROLE_FRETE)`);
-    
-    return { 
-      success: true, 
-      count: registrosParaInserir.length,
-      pagos: nfsPagas.size,
-      nao_pagos: registrosParaInserir.length - nfsPagas.size
-    };
+    return { success: true, count: registrosParaInserir.length };
 
   } catch (error) {
     console.error('❌ Erro na sincronização:', error);
@@ -180,7 +127,9 @@ async function syncVendasMiguel() {
   }
 }
 
-// GET /api/sync - Sincronizar dados manualmente
+// API Endpoints
+
+// GET /api/sync - Sincronizar dados
 app.get('/api/sync', async (req, res) => {
   try {
     const result = await syncVendasMiguel();
@@ -199,7 +148,7 @@ app.get('/api/vendas', async (req, res) => {
     const { data, error } = await supabase
       .from('vendas_miguel')
       .select('*')
-      .order('data_emissao', { ascending: true });
+      .order('numero_nf', { ascending: true });
 
     if (error) throw error;
 
@@ -225,9 +174,7 @@ app.get('/api/dashboard', async (req, res) => {
       pago: 0,
       aReceber: 0,
       entregue: 0,
-      faturado: 0,
-      quantidadePagas: 0,
-      quantidadeEntregues: 0
+      faturado: 0
     };
 
     if (data) {
@@ -237,15 +184,13 @@ app.get('/api/dashboard', async (req, res) => {
         // Faturado = tudo
         stats.faturado += valor;
 
-        if (venda.is_pago === true || (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento)) {
+        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
           // Pago
           stats.pago += valor;
-          stats.quantidadePagas++;
         } else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
           // A receber (entregue mas não pago)
           stats.aReceber += valor;
-          stats.entregue++;
-          stats.quantidadeEntregues++;
+          stats.entregue += 1;
         }
       });
     }
@@ -259,33 +204,23 @@ app.get('/api/dashboard', async (req, res) => {
 
 // Health check
 app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'ok', 
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime()
-  });
+  res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
 // Sincronização automática a cada 5 minutos
-const SYNC_INTERVAL = 5 * 60 * 1000; // 5 minutos
 setInterval(async () => {
   try {
-    console.log('⏰ Executando sincronização automática...');
     await syncVendasMiguel();
   } catch (error) {
-    console.error('❌ Erro na sincronização automática:', error);
+    console.error('Erro na sincronização automática:', error);
   }
-}, SYNC_INTERVAL);
+}, 5 * 60 * 1000);
 
 // Sincronização inicial
-console.log('🔄 Executando sincronização inicial...');
-syncVendasMiguel()
-  .then(() => console.log('✅ Sincronização inicial concluída'))
-  .catch(err => console.error('❌ Erro na sincronização inicial:', err));
+syncVendasMiguel().catch(console.error);
 
 // Start server
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`📊 Vendas Miguel - Sistema de Monitoramento`);
-  console.log(`🔄 Sincronização automática: a cada ${SYNC_INTERVAL / 1000 / 60} minutos`);
 });
