@@ -32,7 +32,25 @@ app.use((req, res, next) => {
 });
 
 app.use(express.json());
-app.use(express.static('public'));
+
+// Servir arquivos estáticos
+app.use(express.static('./', {
+  index: 'index.html',
+  setHeaders: (res, path) => {
+    if (path.endsWith('.js')) {
+      res.setHeader('Content-Type', 'application/javascript');
+    } else if (path.endsWith('.css')) {
+      res.setHeader('Content-Type', 'text/css');
+    } else if (path.endsWith('.html')) {
+      res.setHeader('Content-Type', 'text/html');
+    }
+  }
+}));
+
+// Rota principal
+app.get('/', (req, res) => {
+  res.sendFile(__dirname + '/index.html');
+});
 
 // Função para sincronizar dados do Miguel
 async function syncVendasMiguel() {
@@ -239,6 +257,21 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// 404 para rotas não encontradas
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    res.status(404).json({ error: 'Rota não encontrada' });
+  } else {
+    res.sendFile(__dirname + '/index.html');
+  }
+});
+
+// Tratamento de erros
+app.use((error, req, res, next) => {
+  console.error('Erro:', error);
+  res.status(500).json({ error: 'Erro interno do servidor' });
+});
+
 // Sincronização automática a cada 5 minutos
 setInterval(async () => {
   try {
@@ -255,4 +288,5 @@ syncVendasMiguel().catch(console.error);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`🚀 Servidor rodando na porta ${PORT}`);
   console.log(`📊 Vendas Miguel - Sistema de Monitoramento`);
+  console.log(`🌐 Acesse: http://localhost:${PORT}`);
 });
