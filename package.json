@@ -1,13 +1,18 @@
 {
   "name": "vendas-miguel",
   "version": "1.0.0",
-  "description": "Sistema de monitoramento de vendas do Miguel",
+  "description": "Sistema de monitoramento de vendas do Miguel - Integração Controle de Frete e Contas a Receber",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js"
   },
-  "keywords": ["vendas", "miguel"],
+  "keywords": [
+    "vendas",
+    "miguel",
+    "controle-frete",
+    "contas-receber"
+  ],
   "author": "I.R. Comércio",
   "license": "MIT",
   "dependencies": {
