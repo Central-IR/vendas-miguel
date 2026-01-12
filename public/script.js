@@ -1,41 +1,83 @@
-// CONFIGURAÇÃO
-const API_URL = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'
-    ? 'http://localhost:10000/api'
-    : `${window.location.origin}/api`;
+const DEVELOPMENT_MODE = false;
+const PORTAL_URL = 'https://ir-comercio-portal-zcan.onrender.com';
+const API_URL = 'https://vendas-miguel.onrender.com/api';
 
 let vendas = [];
-let isOnline = false;
 let currentMonth = new Date();
-let calendarYear = new Date().getFullYear();
-
-const meses = [
-    'Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'
-];
+let isOnline = false;
+let sessionToken = null;
+let lastDataHash = '';
+let relatorioMode = false;
 
 console.log('🚀 Vendas Miguel iniciada');
 console.log('📍 API URL:', API_URL);
 
 document.addEventListener('DOMContentLoaded', () => {
-    inicializarApp();
+    if (DEVELOPMENT_MODE) {
+        console.log('⚠️ MODO DESENVOLVIMENTO ATIVADO');
+        sessionToken = 'dev-mode';
+        inicializarApp();
+    } else {
+        verificarAutenticacao();
+    }
 });
+
+function verificarAutenticacao() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const tokenFromUrl = urlParams.get('sessionToken');
+
+    if (tokenFromUrl) {
+        sessionToken = tokenFromUrl;
+        sessionStorage.setItem('vendasSession', tokenFromUrl);
+        window.history.replaceState({}, document.title, window.location.pathname);
+    } else {
+        sessionToken = sessionStorage.getItem('vendasSession');
+    }
+
+    if (!sessionToken) {
+        mostrarTelaAcessoNegado();
+        return;
+    }
+
+    inicializarApp();
+}
+
+function mostrarTelaAcessoNegado(mensagem = 'NÃO AUTORIZADO') {
+    document.body.innerHTML = `
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: var(--bg-primary); color: var(--text-primary); text-align: center; padding: 2rem;">
+            <h1 style="font-size: 2.2rem; margin-bottom: 1rem;">${mensagem}</h1>
+            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Somente usuários autenticados podem acessar esta área.</p>
+            <a href="${PORTAL_URL}" style="display: inline-block; background: var(--btn-register); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ir para o Portal</a>
+        </div>
+    `;
+}
 
 function inicializarApp() {
     updateDisplay();
     checkServerStatus();
     setInterval(checkServerStatus, 15000);
     startPolling();
-    renderCalendar();
+    initCalendar();
 }
 
-// STATUS DO SERVIDOR
 async function checkServerStatus() {
     try {
+        const headers = { 'Accept': 'application/json' };
+        if (!DEVELOPMENT_MODE && sessionToken) {
+            headers['X-Session-Token'] = sessionToken;
+        }
+
         const response = await fetch(`${API_URL}/vendas`, {
             method: 'GET',
-            headers: { 'Accept': 'application/json' },
+            headers: headers,
             mode: 'cors'
         });
+
+        if (!DEVELOPMENT_MODE && response.status === 401) {
+            sessionStorage.removeItem('vendasSession');
+            mostrarTelaAcessoNegado('Sua sessão expirou');
+            return false;
+        }
 
         const wasOffline = !isOnline;
         isOnline = response.ok;
@@ -48,7 +90,7 @@ async function checkServerStatus() {
         updateConnectionStatus();
         return isOnline;
     } catch (error) {
-        console.error('❌ Erro ao verificar servidor:', error.message);
+        console.error('❌ Erro ao verificar servidor:', error);
         isOnline = false;
         updateConnectionStatus();
         return false;
@@ -57,471 +99,455 @@ async function checkServerStatus() {
 
 function updateConnectionStatus() {
     const statusElement = document.getElementById('connectionStatus');
-    if (statusElement) {
-        statusElement.className = isOnline ? 'connection-status online' : 'connection-status offline';
-    }
-}
-
-// CARREGAR VENDAS
-async function loadVendas() {
-    if (!isOnline) return;
-
-    try {
-        const timestamp = new Date().getTime();
-        const response = await fetch(`${API_URL}/vendas?_t=${timestamp}`, {
-            method: 'GET',
-            headers: { 
-                'Accept': 'application/json',
-                'Cache-Control': 'no-cache'
-            },
-            mode: 'cors'
-        });
-
-        if (!response.ok) return;
-
-        const data = await response.json();
-        vendas = data;
-        
-        await updateDashboard();
-        filterVendas();
-        console.log(`✅ ${vendas.length} vendas carregadas`);
-    } catch (error) {
-        console.error('❌ Erro ao carregar vendas:', error);
-    }
+    const statusRelatorio = document.getElementById('connectionStatusRelatorio');
+    const className = isOnline ? 'connection-status online' : 'connection-status offline';
+    
+    if (statusElement) statusElement.className = className;
+    if (statusRelatorio) statusRelatorio.className = className;
 }
 
 function startPolling() {
     loadVendas();
     setInterval(() => {
         if (isOnline) loadVendas();
-    }, 30000); // 30 segundos
+    }, 10000);
 }
 
-// DASHBOARD - VALORES UNIVERSAIS (todos os meses)
-async function updateDashboard() {
+async function loadVendas() {
+    if (!isOnline && !DEVELOPMENT_MODE) return;
+
     try {
-        const response = await fetch(`${API_URL}/dashboard`, {
+        const headers = { 'Accept': 'application/json' };
+        if (!DEVELOPMENT_MODE && sessionToken) {
+            headers['X-Session-Token'] = sessionToken;
+        }
+
+        const response = await fetch(`${API_URL}/vendas`, {
             method: 'GET',
-            headers: { 'Accept': 'application/json' },
+            headers: headers,
             mode: 'cors'
         });
 
-        if (!response.ok) return;
+        if (!DEVELOPMENT_MODE && response.status === 401) {
+            sessionStorage.removeItem('vendasSession');
+            mostrarTelaAcessoNegado('Sua sessão expirou');
+            return;
+        }
 
-        const stats = await response.json();
+        if (!response.ok) {
+            console.error('❌ Erro ao carregar vendas:', response.status);
+            return;
+        }
 
-        document.getElementById('totalPago').textContent = 
-            `R$ ${stats.pago.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const data = await response.json();
+        vendas = data;
         
-        document.getElementById('totalAReceber').textContent = 
-            `R$ ${stats.aReceber.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
-        
-        document.getElementById('totalEntregue').textContent = stats.entregue;
-        
-        document.getElementById('totalFaturado').textContent = 
-            `R$ ${stats.faturado.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2})}`;
+        const newHash = JSON.stringify(vendas.map(v => v.id));
+        if (newHash !== lastDataHash) {
+            lastDataHash = newHash;
+            updateDisplay();
+        }
     } catch (error) {
-        console.error('❌ Erro ao atualizar dashboard:', error);
+        console.error('❌ Erro ao carregar:', error);
     }
 }
 
-// NAVEGAÇÃO POR MESES
-function updateDisplay() {
-    const display = document.getElementById('currentMonth');
-    if (display) {
-        display.textContent = `${meses[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
+async function syncData() {
+    if (!isOnline && !DEVELOPMENT_MODE) {
+        showToast('Servidor offline. Não é possível sincronizar.', 'error');
+        return;
     }
-    filterVendas();
+
+    showToast('Sincronizando dados...', 'info');
+    await loadVendas();
+    showToast('Dados sincronizados com sucesso!', 'success');
 }
 
-window.changeMonth = function(direction) {
-    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + direction, 1);
+function changeMonth(direction) {
+    currentMonth.setMonth(currentMonth.getMonth() + direction);
     updateDisplay();
-};
+}
 
-// FILTRAR VENDAS
-window.filterVendas = function() {
-    const searchTerm = document.getElementById('search').value.toLowerCase();
-    const filterStatus = document.getElementById('filterStatus').value;
+function updateMonthDisplay() {
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const monthName = months[currentMonth.getMonth()];
+    const year = currentMonth.getFullYear();
+    document.getElementById('currentMonth').textContent = `${monthName} ${year}`;
+}
+
+function toggleRelatorioMes() {
+    // Abrir modal com relatório do mês
+    const modal = document.getElementById('relatorioModal');
+    if (!modal) return;
     
-    const filtrados = vendas.filter(v => {
-        // Filtrar por mês atual
-        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
-        const matchMes = dataEmissao.getMonth() === currentMonth.getMonth() && 
-                         dataEmissao.getFullYear() === currentMonth.getFullYear();
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const monthName = months[currentMonth.getMonth()];
+    const year = currentMonth.getFullYear();
+    
+    document.getElementById('relatorioModalTitulo').textContent = `Relatório - ${monthName} ${year}`;
+    
+    // Filtrar apenas vendas PAGAS do mês atual
+    let vendasPagas = vendas.filter(v => {
+        if (!v.data_pagamento || v.status_pagamento !== 'PAGO') return false;
         
-        if (!matchMes) return false;
+        const dataPag = new Date(v.data_pagamento);
+        return dataPag.getMonth() === currentMonth.getMonth() &&
+               dataPag.getFullYear() === currentMonth.getFullYear();
+    });
+    
+    const modalBody = document.getElementById('relatorioModalBody');
+    
+    if (vendasPagas.length === 0) {
+        modalBody.innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.3; margin-bottom: 1rem;">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <p style="font-size: 1.1rem; font-weight: 600; margin: 0;">Nenhum Pagamento Encontrado</p>
+                <p style="font-size: 0.9rem; margin-top: 0.5rem;">Não há pagamentos registrados para ${monthName} ${year}</p>
+            </div>
+        `;
+    } else {
+        // Ordenar por data de pagamento crescente
+        vendasPagas.sort((a, b) => new Date(a.data_pagamento) - new Date(b.data_pagamento));
         
-        // Filtrar por busca
-        const matchSearch = !searchTerm || 
-            v.numero_nf?.toString().includes(searchTerm) ||
-            v.nome_orgao?.toLowerCase().includes(searchTerm);
+        const rows = vendasPagas.map(venda => `
+            <tr>
+                <td><strong>${venda.numero_nf || '-'}</strong></td>
+                <td>${formatDate(venda.data_emissao)}</td>
+                <td>${venda.nome_orgao || '-'}</td>
+                <td>${formatDate(venda.data_pagamento)}</td>
+            </tr>
+        `).join('');
         
-        // Filtrar por status
-        let matchStatus = true;
-        if (filterStatus === 'PAGO') {
-            matchStatus = v.is_pago === true;
-        } else if (filterStatus === 'ENTREGUE') {
-            matchStatus = v.is_pago === false && v.status_frete === 'ENTREGUE';
-        } else if (filterStatus === 'EM TRÂNSITO') {
-            matchStatus = v.is_pago === false && v.status_frete === 'EM TRÂNSITO';
-        } else if (filterStatus === 'SIMPLES REMESSA') {
-            matchStatus = v.is_pago === false && v.status_frete === 'SIMPLES REMESSA';
-        } else if (filterStatus === 'REMESSA DE AMOSTRA') {
-            matchStatus = v.is_pago === false && v.status_frete === 'REMESSA DE AMOSTRA';
+        modalBody.innerHTML = `
+            <div style="overflow-x: auto;">
+                <table style="width: 100%; border-collapse: collapse;">
+                    <thead>
+                        <tr style="background: var(--bg-secondary); border-bottom: 2px solid var(--border-color);">
+                            <th style="padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase;">Nº NF</th>
+                            <th style="padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase;">Data Emissão</th>
+                            <th style="padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase;">Órgão</th>
+                            <th style="padding: 12px; text-align: left; font-size: 0.85rem; text-transform: uppercase;">Data Pagamento</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${rows}
+                    </tbody>
+                </table>
+            </div>
+        `;
+    }
+    
+    modal.classList.add('show');
+}
+
+function closeRelatorioModal() {
+    const modal = document.getElementById('relatorioModal');
+    if (modal) {
+        modal.classList.remove('show');
+    }
+}
+
+window.closeRelatorioModal = closeRelatorioModal;
+
+function updateRelatorioMes() {
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const monthName = months[currentMonth.getMonth()];
+    const year = currentMonth.getFullYear();
+    
+    document.getElementById('relatorioMesNome').textContent = `${monthName} ${year}`;
+    
+    // Filtrar apenas vendas PAGAS do mês atual
+    let vendasPagas = vendas.filter(v => {
+        if (!v.data_pagamento || v.status_pagamento !== 'PAGO') return false;
+        
+        const dataPag = new Date(v.data_pagamento);
+        return dataPag.getMonth() === currentMonth.getMonth() &&
+               dataPag.getFullYear() === currentMonth.getFullYear();
+    });
+    
+    // Aplicar filtro de pesquisa
+    const search = document.getElementById('searchRelatorio').value.toLowerCase();
+    if (search) {
+        vendasPagas = vendasPagas.filter(v => 
+            (v.numero_nf || '').toLowerCase().includes(search) ||
+            (v.nome_orgao || '').toLowerCase().includes(search)
+        );
+    }
+    
+    // Ordenar por data de pagamento (crescente)
+    vendasPagas.sort((a, b) => new Date(a.data_pagamento) - new Date(b.data_pagamento));
+    
+    const container = document.getElementById('relatorioContainer');
+    
+    if (vendasPagas.length === 0) {
+        container.innerHTML = `
+            <tr>
+                <td colspan="6" style="text-align: center; padding: 2rem;">
+                    Nenhuma venda paga encontrada neste mês
+                </td>
+            </tr>
+        `;
+        document.getElementById('relatorioTotal').textContent = 'R$ 0,00';
+        return;
+    }
+    
+    let totalMes = 0;
+    container.innerHTML = vendasPagas.map(venda => {
+        const valor = parseFloat(venda.valor_nf || 0);
+        totalMes += valor;
+        
+        return `
+            <tr>
+                <td>${venda.numero_nf || '-'}</td>
+                <td>${formatDate(venda.data_emissao)}</td>
+                <td>${venda.nome_orgao || '-'}</td>
+                <td><strong>R$ ${valor.toFixed(2).replace('.', ',')}</strong></td>
+                <td>${formatDate(venda.previsao_entrega)}</td>
+                <td>${formatDate(venda.data_pagamento)}</td>
+            </tr>
+        `;
+    }).join('');
+    
+    document.getElementById('relatorioTotal').textContent = `R$ ${totalMes.toFixed(2).replace('.', ',')}`;
+}
+
+function filterRelatorio() {
+    updateRelatorioMes();
+}
+
+function filterVendas() {
+    updateTable();
+}
+
+function updateDisplay() {
+    if (relatorioMode) {
+        updateRelatorioMes();
+    } else {
+        updateMonthDisplay();
+        updateDashboard();
+        updateTable();
+    }
+}
+
+function updateDashboard() {
+    // NOVOS DASHBOARDS: PAGO | A RECEBER | ENTREGUE | FATURADO
+    let totalPago = 0;
+    let totalAReceber = 0;
+    let quantidadeEntregue = 0;
+    let totalFaturado = 0;
+    
+    vendas.forEach(venda => {
+        const valor = parseFloat(venda.valor_nf || 0);
+        
+        // FATURADO: Soma TUDO (pagos + não pagos)
+        totalFaturado += valor;
+        
+        // PAGO: Apenas registros com origem CONTAS_RECEBER e is_pago = true
+        if (venda.is_pago === true || (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento)) {
+            totalPago += valor;
+        }
+        // A RECEBER: Apenas registros de CONTROLE_FRETE (entregues mas não pagos)
+        else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
+            totalAReceber += valor;
         }
         
-        return matchSearch && matchStatus;
+        // ENTREGUE: Quantidade de NFs que vieram do Controle de Frete marcadas como entregue
+        if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
+            quantidadeEntregue++;
+        }
+        // OU notas pagas (que também são consideradas entregues)
+        else if (venda.is_pago === true || venda.origem === 'CONTAS_RECEBER') {
+            quantidadeEntregue++;
+        }
     });
+    
+    document.getElementById('totalPago').textContent = formatCurrency(totalPago);
+    document.getElementById('totalAReceber').textContent = formatCurrency(totalAReceber);
+    document.getElementById('totalEntregue').textContent = quantidadeEntregue;
+    document.getElementById('totalFaturado').textContent = formatCurrency(totalFaturado);
+}
+}
 
-    renderTable(filtrados);
-};
-
-// RENDERIZAR TABELA
-function renderTable(vendasExibir) {
-    const tbody = document.getElementById('vendasContainer');
-    if (!tbody) return;
-
-    if (vendasExibir.length === 0) {
-        tbody.innerHTML = `
+function updateTable() {
+    const container = document.getElementById('vendasContainer');
+    let filteredVendas = getVendasForCurrentMonth();
+    
+    const search = document.getElementById('search').value.toLowerCase();
+    const filterStatus = document.getElementById('filterStatus').value;
+    
+    if (search) {
+        filteredVendas = filteredVendas.filter(v => 
+            (v.numero_nf || '').toLowerCase().includes(search) ||
+            (v.nome_orgao || '').toLowerCase().includes(search)
+        );
+    }
+    
+    if (filterStatus === 'PAGO') {
+        filteredVendas = filteredVendas.filter(v => v.is_pago === true || v.origem === 'CONTAS_RECEBER');
+    } else if (filterStatus === 'ENTREGUE') {
+        filteredVendas = filteredVendas.filter(v => v.origem === 'CONTROLE_FRETE' && v.status_frete === 'ENTREGUE');
+    }
+    
+    if (filteredVendas.length === 0) {
+        container.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; padding: 3rem; color: var(--text-secondary);">
+                <td colspan="7" style="text-align: center; padding: 2rem;">
                     Nenhuma venda encontrada
                 </td>
             </tr>
         `;
         return;
     }
-
-    tbody.innerHTML = vendasExibir.map(v => {
-        // Classe para linhas pagas (verde)
-        const rowClass = v.is_pago ? 'row-pago' : '';
+    
+    // ORDENAR CRESCENTE por data de emissão
+    filteredVendas.sort((a, b) => new Date(a.data_emissao) - new Date(b.data_emissao));
+    
+    container.innerHTML = filteredVendas.map(venda => {
+        let status = 'ENTREGUE';
+        let statusClass = 'reprovada';
+        let rowClass = '';
         
-        // Status - mostrar status correto baseado na origem
-        let statusBadge = '';
-        if (v.is_pago) {
-            // Vem do Contas a Receber - PAGO
-            statusBadge = '<span class="badge entregue">PAGO</span>';
-        } else if (v.origem === 'CONTROLE_FRETE') {
-            // Vem do Controle de Frete - mostrar status do frete
-            if (v.status_frete === 'ENTREGUE') {
-                statusBadge = '<span class="badge entregue">ENTREGUE</span>';
-            } else if (v.status_frete === 'EM TRÂNSITO') {
-                statusBadge = '<span class="badge transito">EM TRÂNSITO</span>';
-            } else if (v.status_frete === 'SIMPLES REMESSA') {
-                statusBadge = '<span class="badge info">SIMPLES REMESSA</span>';
-            } else if (v.status_frete === 'REMESSA DE AMOSTRA') {
-                statusBadge = '<span class="badge warning">REMESSA DE AMOSTRA</span>';
-            } else {
-                statusBadge = `<span class="badge">${v.status_frete || '-'}</span>`;
-            }
+        // Verificar se é PAGO (destaque verde)
+        if (venda.is_pago === true || venda.origem === 'CONTAS_RECEBER') {
+            status = 'PAGO';
+            statusClass = 'aprovada';
+            rowClass = 'row-pago';  // Classe para destacar linha inteira em verde
         }
-
+        
         return `
-            <tr class="${rowClass}">
-                <td><strong>${v.numero_nf || '-'}</strong></td>
-                <td>${formatDate(v.data_emissao)}</td>
-                <td>${v.nome_orgao || '-'}</td>
-                <td><strong>R$ ${parseFloat(v.valor_nf || 0).toFixed(2)}</strong></td>
-                <td>${v.tipo_nf || '-'}</td>
-                <td>${statusBadge}</td>
-                <td class="actions-cell" style="text-align: center;">
-                    <button onclick="viewVenda('${v.id}')" class="action-btn view">Ver</button>
-                </td>
-            </tr>
-        `;
+        <tr class="${rowClass}">
+            <td><strong>${venda.numero_nf || '-'}</strong></td>
+            <td>${formatDate(venda.data_emissao)}</td>
+            <td>${venda.nome_orgao || '-'}</td>
+            <td><strong>R$ ${parseFloat(venda.valor_nf || 0).toFixed(2).replace('.', ',')}</strong></td>
+            <td>${venda.tipo_nf || '-'}</td>
+            <td>
+                <span class="badge ${statusClass}">${status}</span>
+            </td>
+            <td class="actions-cell">
+                <div class="actions">
+                    <button onclick="viewVenda('${venda.id}')" class="action-btn view" title="Ver detalhes">Ver</button>
+                </div>
+            </td>
+        </tr>
+    `;
     }).join('');
 }
 
-// FORMATAR DATA
+function getVendasForCurrentMonth() {
+    return vendas.filter(venda => {
+        const vendaDate = new Date(venda.data_emissao);
+        return vendaDate.getMonth() === currentMonth.getMonth() &&
+               vendaDate.getFullYear() === currentMonth.getFullYear();
+    });
+}
+
+function viewVenda(id) {
+    const venda = vendas.find(v => v.id === id);
+    if (!venda) return;
+    
+    document.getElementById('modalNumeroNF').textContent = venda.numero_nf || '-';
+    
+    const modalBody = document.getElementById('modalBody');
+    modalBody.innerHTML = `
+        <div class="info-section">
+            <h4>Informações Gerais</h4>
+            <p><strong>Nº NF:</strong> ${venda.numero_nf || '-'}</p>
+            <p><strong>Data Emissão:</strong> ${formatDate(venda.data_emissao)}</p>
+            <p><strong>Órgão:</strong> ${venda.nome_orgao || '-'}</p>
+            <p><strong>Valor:</strong> R$ ${parseFloat(venda.valor_nf || 0).toFixed(2).replace('.', ',')}</p>
+            <p><strong>Tipo:</strong> ${venda.tipo_nf || '-'}</p>
+            ${venda.transportadora ? `<p><strong>Transportadora:</strong> ${venda.transportadora}</p>` : ''}
+            ${venda.previsao_entrega ? `<p><strong>Previsão Entrega:</strong> ${formatDate(venda.previsao_entrega)}</p>` : ''}
+            ${venda.data_pagamento ? `<p><strong>Data Pagamento:</strong> ${formatDate(venda.data_pagamento)}</p>` : ''}
+            ${venda.observacoes ? `<p><strong>Observações:</strong> ${venda.observacoes}</p>` : ''}
+        </div>
+    `;
+    
+    document.getElementById('infoModal').classList.add('show');
+}
+
+function closeInfoModal() {
+    document.getElementById('infoModal').classList.remove('show');
+}
+
 function formatDate(dateString) {
     if (!dateString) return '-';
-    const date = new Date(dateString + 'T00:00:00');
+    const date = new Date(dateString);
     return date.toLocaleDateString('pt-BR');
 }
 
-// VER DETALHES
-window.viewVenda = function(id) {
-    const venda = vendas.find(v => String(v.id) === String(id));
-    if (!venda) {
-        showToast('Venda não encontrada', 'error');
-        return;
-    }
+function formatCurrency(value) {
+    return `R$ ${parseFloat(value).toFixed(2).replace('.', ',')}`;
+}
 
-    // Montar detalhes baseado na origem
-    let detalhesHTML = '';
+function showToast(message, type = 'success') {
+    const oldMessages = document.querySelectorAll('.floating-message');
+    oldMessages.forEach(msg => msg.remove());
     
-    if (venda.origem === 'CONTAS_RECEBER') {
-        // Exibir informações do Contas a Receber
-        detalhesHTML = `
-            <div class="info-line">
-                <span class="info-label">Origem:</span>
-                <span class="info-value"><strong>Contas a Receber (PAGO)</strong></span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Nº NF:</span>
-                <span class="info-value"><strong>${venda.numero_nf}</strong></span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Data Emissão:</span>
-                <span class="info-value">${formatDate(venda.data_emissao)}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Órgão:</span>
-                <span class="info-value">${venda.nome_orgao || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Valor NF:</span>
-                <span class="info-value"><strong>R$ ${parseFloat(venda.valor_nf || 0).toFixed(2)}</strong></span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Tipo NF:</span>
-                <span class="info-value">${venda.tipo_nf || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Banco:</span>
-                <span class="info-value">${venda.banco || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Data Vencimento:</span>
-                <span class="info-value">${formatDate(venda.data_vencimento)}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Data Pagamento:</span>
-                <span class="info-value" style="color: var(--success-color); font-weight: 700;">${formatDate(venda.data_pagamento)}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Observações:</span>
-                <span class="info-value">${venda.observacoes || '-'}</span>
-            </div>
-        `;
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `floating-message ${type}`;
+    messageDiv.textContent = message;
+    
+    document.body.appendChild(messageDiv);
+    
+    setTimeout(() => {
+        messageDiv.style.animation = 'slideOut 0.3s ease forwards';
+        setTimeout(() => messageDiv.remove(), 300);
+    }, 3000);
+}
+
+// CALENDAR FUNCTIONS
+let calendarYear = new Date().getFullYear();
+
+function initCalendar() {
+    calendarYear = currentMonth.getFullYear();
+    renderCalendar();
+}
+
+function toggleCalendar() {
+    const modal = document.getElementById('calendarModal');
+    if (modal.style.display === 'flex') {
+        modal.style.display = 'none';
     } else {
-        // Exibir informações do Controle de Frete
-        detalhesHTML = `
-            <div class="info-line">
-                <span class="info-label">Origem:</span>
-                <span class="info-value"><strong>Controle de Frete (ENTREGUE)</strong></span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Nº NF:</span>
-                <span class="info-value"><strong>${venda.numero_nf}</strong></span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Data Emissão:</span>
-                <span class="info-value">${formatDate(venda.data_emissao)}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Documento:</span>
-                <span class="info-value">${venda.documento || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Valor NF:</span>
-                <span class="info-value"><strong>R$ ${parseFloat(venda.valor_nf || 0).toFixed(2)}</strong></span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Tipo NF:</span>
-                <span class="info-value">${venda.tipo_nf || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Órgão:</span>
-                <span class="info-value">${venda.nome_orgao || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Contato:</span>
-                <span class="info-value">${venda.contato_orgao || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Transportadora:</span>
-                <span class="info-value">${venda.transportadora || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Valor Frete:</span>
-                <span class="info-value">R$ ${parseFloat(venda.valor_frete || 0).toFixed(2)}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Data Coleta:</span>
-                <span class="info-value">${formatDate(venda.data_coleta)}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Cidade Destino:</span>
-                <span class="info-value">${venda.cidade_destino || '-'}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Previsão Entrega:</span>
-                <span class="info-value">${formatDate(venda.previsao_entrega)}</span>
-            </div>
-            <div class="info-line">
-                <span class="info-label">Status:</span>
-                <span class="info-value">${venda.status_frete || '-'}</span>
-            </div>
-        `;
+        modal.style.display = 'flex';
+        document.getElementById('calendarYear').textContent = calendarYear;
+        renderCalendar();
     }
+}
 
-    const modal = document.getElementById('infoModal');
-    document.getElementById('modalNumeroNF').textContent = venda.numero_nf;
-    document.getElementById('modalBody').innerHTML = detalhesHTML;
-    modal.style.display = 'flex';
-};
-
-window.closeInfoModal = function() {
-    document.getElementById('infoModal').style.display = 'none';
-};
-
-// CALENDÁRIO
-function renderCalendar() {
-    const container = document.getElementById('calendarMonths');
-    if (!container) return;
-
+function changeCalendarYear(direction) {
+    calendarYear += direction;
     document.getElementById('calendarYear').textContent = calendarYear;
+    renderCalendar();
+}
 
-    container.innerHTML = meses.map((mes, index) => {
-        const isCurrentMonth = index === currentMonth.getMonth() && calendarYear === currentMonth.getFullYear();
+function renderCalendar() {
+    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
+                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    
+    const container = document.getElementById('calendarMonths');
+    container.innerHTML = months.map((month, index) => {
+        const isCurrentMonth = index === currentMonth.getMonth() && 
+                              calendarYear === currentMonth.getFullYear();
         return `
-            <button 
-                class="calendar-month-btn ${isCurrentMonth ? 'active' : ''}" 
-                onclick="selectMonth(${index})"
-            >
-                ${mes}
+            <button class="month-btn ${isCurrentMonth ? 'active' : ''}" 
+                    onclick="selectMonth(${index})">
+                ${month}
             </button>
         `;
     }).join('');
 }
 
-window.selectMonth = function(monthIndex) {
+function selectMonth(monthIndex) {
     currentMonth = new Date(calendarYear, monthIndex, 1);
-    updateDisplay();
     toggleCalendar();
-};
-
-window.changeCalendarYear = function(direction) {
-    calendarYear += direction;
-    renderCalendar();
-};
-
-window.toggleCalendar = function() {
-    const modal = document.getElementById('calendarModal');
-    if (modal) {
-        modal.classList.toggle('show');
-    }
-};
-
-// SINCRONIZAÇÃO MANUAL
-window.syncData = async function() {
-    if (!isOnline) {
-        showToast('Sistema offline', 'error');
-        return;
-    }
-
-    try {
-        showToast('Sincronizando...', 'success');
-        
-        const response = await fetch(`${API_URL}/sync`, {
-            method: 'GET',
-            headers: { 'Accept': 'application/json' }
-        });
-
-        if (!response.ok) {
-            throw new Error('Erro ao sincronizar');
-        }
-
-        await loadVendas();
-        showToast('Dados sincronizados com sucesso', 'success');
-    } catch (error) {
-        console.error('Erro ao sincronizar:', error);
-        showToast('Erro ao sincronizar', 'error');
-    }
-};
-
-// RELATÓRIO MENSAL (apenas notas pagas)
-window.toggleRelatorioMes = function() {
-    const modal = document.getElementById('relatorioModal');
-    if (!modal) return;
-
-    if (modal.style.display === 'flex') {
-        modal.style.display = 'none';
-        return;
-    }
-
-    // Filtrar apenas notas PAGAS do mês atual pela DATA DE PAGAMENTO
-    const vendasPagas = vendas.filter(v => {
-        if (!v.is_pago || !v.data_pagamento) return false;
-
-        const dataPagamento = new Date(v.data_pagamento + 'T00:00:00');
-        return dataPagamento.getMonth() === currentMonth.getMonth() && 
-               dataPagamento.getFullYear() === currentMonth.getFullYear();
-    });
-
-    // Ordenar por data de pagamento
-    vendasPagas.sort((a, b) => {
-        const dateA = new Date(a.data_pagamento);
-        const dateB = new Date(b.data_pagamento);
-        return dateA - dateB;
-    });
-
-    const titulo = document.getElementById('relatorioModalTitulo');
-    const corpo = document.getElementById('relatorioModalBody');
-
-    titulo.textContent = `Relatório Mensal - ${meses[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
-
-    if (vendasPagas.length === 0) {
-        corpo.innerHTML = `
-            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-                Nenhum pagamento registrado neste mês
-            </div>
-        `;
-    } else {
-        corpo.innerHTML = `
-            <div style="overflow-x: auto;">
-                <table>
-                    <thead>
-                        <tr>
-                            <th>Nº NF</th>
-                            <th>Data Emissão</th>
-                            <th>Valor NF</th>
-                            <th>Data Pagamento</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${vendasPagas.map(v => `
-                            <tr class="row-pago">
-                                <td><strong>${v.numero_nf}</strong></td>
-                                <td>${formatDate(v.data_emissao)}</td>
-                                <td><strong>R$ ${parseFloat(v.valor_nf || 0).toFixed(2)}</strong></td>
-                                <td style="color: var(--success-color); font-weight: 700;">${formatDate(v.data_pagamento)}</td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                    <tfoot>
-                        <tr>
-                            <td colspan="2"><strong>Total do Mês</strong></td>
-                            <td colspan="2"><strong>R$ ${vendasPagas.reduce((sum, v) => sum + parseFloat(v.valor_nf || 0), 0).toFixed(2)}</strong></td>
-                        </tr>
-                    </tfoot>
-                </table>
-            </div>
-        `;
-    }
-
-    modal.style.display = 'flex';
-};
-
-window.closeRelatorioModal = function() {
-    document.getElementById('relatorioModal').style.display = 'none';
-};
-
-// TOAST
-function showToast(message, type) {
-    const oldMessages = document.querySelectorAll('.floating-message');
-    oldMessages.forEach(msg => msg.remove());
-
-    const messageDiv = document.createElement('div');
-    messageDiv.className = `floating-message ${type}`;
-    messageDiv.textContent = message;
-
-    document.body.appendChild(messageDiv);
-
-    setTimeout(() => {
-        messageDiv.style.animation = 'slideOut 0.3s ease forwards';
-        setTimeout(() => messageDiv.remove(), 300);
-    }, 3000);
+    updateDisplay();
 }
