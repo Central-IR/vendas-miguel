@@ -1,84 +1,182 @@
-const DEVELOPMENT_MODE = false;
+const API_URL = window.location.origin + '/api';
 const PORTAL_URL = 'https://ir-comercio-portal-zcan.onrender.com';
-const API_URL = 'https://vendas-miguel.onrender.com/api';
+const DEVELOPMENT_MODE = true;
 
-let vendas = [];
-let currentMonth = new Date();
 let isOnline = false;
-let sessionToken = null;
 let lastDataHash = '';
-let relatorioMode = false;
+let currentMonth = new Date();
+let allVendas = [];
+let sessionToken = null;
+let calendarYear = new Date().getFullYear();
 
 console.log('🚀 Vendas Miguel iniciada');
 console.log('📍 API URL:', API_URL);
 
+// Inicialização
 document.addEventListener('DOMContentLoaded', () => {
     if (DEVELOPMENT_MODE) {
-        console.log('⚠️ MODO DESENVOLVIMENTO ATIVADO');
         sessionToken = 'dev-mode';
-        inicializarApp();
     } else {
-        verificarAutenticacao();
+        const urlParams = new URLSearchParams(window.location.search);
+        sessionToken = urlParams.get('sessionToken') || sessionStorage.getItem('vendasMiguelSession');
+        
+        if (!sessionToken) {
+            mostrarMensagemNaoAutorizado();
+            return;
+        }
+        
+        if (urlParams.get('sessionToken')) {
+            sessionStorage.setItem('vendasMiguelSession', sessionToken);
+        }
     }
+    
+    inicializarApp();
 });
 
-function verificarAutenticacao() {
-    const urlParams = new URLSearchParams(window.location.search);
-    const tokenFromUrl = urlParams.get('sessionToken');
-
-    if (tokenFromUrl) {
-        sessionToken = tokenFromUrl;
-        sessionStorage.setItem('vendasSession', tokenFromUrl);
-        window.history.replaceState({}, document.title, window.location.pathname);
-    } else {
-        sessionToken = sessionStorage.getItem('vendasSession');
-    }
-
-    if (!sessionToken) {
-        mostrarTelaAcessoNegado();
-        return;
-    }
-
-    inicializarApp();
-}
-
-function mostrarTelaAcessoNegado(mensagem = 'NÃO AUTORIZADO') {
+function mostrarMensagemNaoAutorizado() {
     document.body.innerHTML = `
-        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background: var(--bg-primary); color: var(--text-primary); text-align: center; padding: 2rem;">
-            <h1 style="font-size: 2.2rem; margin-bottom: 1rem;">${mensagem}</h1>
-            <p style="color: var(--text-secondary); margin-bottom: 2rem;">Somente usuários autenticados podem acessar esta área.</p>
-            <a href="${PORTAL_URL}" style="display: inline-block; background: var(--btn-register); color: white; padding: 14px 32px; border-radius: 8px; text-decoration: none; font-weight: 600;">Ir para o Portal</a>
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; background: #1a1a1a; color: white; text-align: center; padding: 2rem;">
+            <h1 style="font-size: 3rem; margin-bottom: 1rem; color: #CC7000;">NÃO AUTORIZADO</h1>
+            <p style="font-size: 1.2rem; color: #999; margin-bottom: 2rem;">Acesso restrito. Por favor, faça login no portal.</p>
+            <a href="${PORTAL_URL}" style="background: #CC7000; color: white; padding: 1rem 2rem; border-radius: 8px; text-decoration: none; font-weight: 600; font-size: 1.1rem;">Ir para o Portal</a>
         </div>
     `;
 }
 
 function inicializarApp() {
-    updateDisplay();
     checkServerStatus();
+    loadVendas();
+    updateMonthDisplay();
     setInterval(checkServerStatus, 15000);
-    startPolling();
-    initCalendar();
+    setInterval(loadVendas, 30000);
 }
+
+function updateMonthDisplay() {
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    const monthStr = `${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
+    const elem = document.getElementById('currentMonth');
+    if (elem) elem.textContent = monthStr;
+}
+
+function changeMonth(direction) {
+    currentMonth = new Date(currentMonth.getFullYear(), currentMonth.getMonth() + direction, 1);
+    updateMonthDisplay();
+    updateDisplay();
+}
+
+function toggleCalendar() {
+    const modal = document.getElementById('calendarModal');
+    if (!modal) return;
+    
+    if (modal.classList.contains('show')) {
+        modal.classList.remove('show');
+    } else {
+        calendarYear = currentMonth.getFullYear();
+        renderCalendar();
+        modal.classList.add('show');
+    }
+}
+
+function changeCalendarYear(direction) {
+    calendarYear += direction;
+    renderCalendar();
+}
+
+function renderCalendar() {
+    const yearElement = document.getElementById('calendarYear');
+    const monthsContainer = document.getElementById('calendarMonths');
+    
+    if (!yearElement || !monthsContainer) return;
+    
+    yearElement.textContent = calendarYear;
+    
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+    
+    monthsContainer.innerHTML = '';
+    
+    monthNames.forEach((name, index) => {
+        const monthButton = document.createElement('div');
+        monthButton.className = 'calendar-month';
+        monthButton.textContent = name;
+        
+        if (calendarYear === currentMonth.getFullYear() && index === currentMonth.getMonth()) {
+            monthButton.classList.add('current');
+        }
+        
+        monthButton.onclick = () => selectMonth(index);
+        monthsContainer.appendChild(monthButton);
+    });
+}
+
+function selectMonth(monthIndex) {
+    currentMonth = new Date(calendarYear, monthIndex, 1);
+    updateMonthDisplay();
+    updateDisplay();
+    toggleCalendar();
+}
+
+function toggleChartModal() {
+    const modal = document.getElementById('chartModal');
+    if (!modal) return;
+    
+    if (modal.classList.contains('show')) {
+        modal.classList.remove('show');
+    } else {
+        calculateAnnualStats();
+        modal.classList.add('show');
+    }
+}
+
+function calculateAnnualStats() {
+    const year = currentMonth.getFullYear();
+    const yearElem = document.getElementById('chartYear');
+    if (yearElem) yearElem.textContent = year;
+    
+    const yearVendas = allVendas.filter(v => {
+        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
+        return dataEmissao.getFullYear() === year;
+    });
+    
+    let faturado = 0;
+    let pago = 0;
+    
+    yearVendas.forEach(venda => {
+        const valor = parseFloat(venda.valor_nf) || 0;
+        faturado += valor;
+        
+        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
+            pago += valor;
+        }
+    });
+    
+    const pendente = faturado - pago;
+    
+    const faturadoElem = document.getElementById('chartFaturado');
+    const pagoElem = document.getElementById('chartPago');
+    const pendenteElem = document.getElementById('chartPendente');
+    
+    if (faturadoElem) faturadoElem.textContent = formatCurrency(faturado);
+    if (pagoElem) pagoElem.textContent = formatCurrency(pago);
+    if (pendenteElem) pendenteElem.textContent = formatCurrency(pendente);
+}
+
+document.addEventListener('click', (e) => {
+    const calendarModal = document.getElementById('calendarModal');
+    const chartModal = document.getElementById('chartModal');
+    
+    if (calendarModal && e.target === calendarModal) {
+        calendarModal.classList.remove('show');
+    }
+    if (chartModal && e.target === chartModal) {
+        chartModal.classList.remove('show');
+    }
+});
 
 async function checkServerStatus() {
     try {
-        const headers = { 'Accept': 'application/json' };
-        if (!DEVELOPMENT_MODE && sessionToken) {
-            headers['X-Session-Token'] = sessionToken;
-        }
-
-        const response = await fetch(`${API_URL}/vendas`, {
-            method: 'GET',
-            headers: headers,
-            mode: 'cors'
-        });
-
-        if (!DEVELOPMENT_MODE && response.status === 401) {
-            sessionStorage.removeItem('vendasSession');
-            mostrarTelaAcessoNegado('Sua sessão expirou');
-            return false;
-        }
-
+        const response = await fetch(`${API_URL}/../health`);
         const wasOffline = !isOnline;
         isOnline = response.ok;
         
@@ -99,227 +197,120 @@ async function checkServerStatus() {
 
 function updateConnectionStatus() {
     const statusElement = document.getElementById('connectionStatus');
-    const statusRelatorio = document.getElementById('connectionStatusRelatorio');
-    const className = isOnline ? 'connection-status online' : 'connection-status offline';
-    
-    if (statusElement) statusElement.className = className;
-    if (statusRelatorio) statusRelatorio.className = className;
-}
-
-function startPolling() {
-    loadVendas();
-    setInterval(() => {
-        if (isOnline) loadVendas();
-    }, 10000);
-}
-
-async function loadVendas() {
-    if (!isOnline && !DEVELOPMENT_MODE) return;
-
-    try {
-        const headers = { 'Accept': 'application/json' };
-        if (!DEVELOPMENT_MODE && sessionToken) {
-            headers['X-Session-Token'] = sessionToken;
-        }
-
-        const response = await fetch(`${API_URL}/vendas`, {
-            method: 'GET',
-            headers: headers,
-            mode: 'cors'
-        });
-
-        if (!DEVELOPMENT_MODE && response.status === 401) {
-            sessionStorage.removeItem('vendasSession');
-            mostrarTelaAcessoNegado('Sua sessão expirou');
-            return;
-        }
-
-        if (!response.ok) {
-            console.error('❌ Erro ao carregar vendas:', response.status);
-            return;
-        }
-
-        const data = await response.json();
-        vendas = data;
-        
-        const newHash = JSON.stringify(vendas.map(v => v.id));
-        if (newHash !== lastDataHash) {
-            lastDataHash = newHash;
-            updateDisplay();
-        }
-    } catch (error) {
-        console.error('❌ Erro ao carregar:', error);
+    if (statusElement) {
+        statusElement.className = isOnline ? 'connection-status online' : 'connection-status offline';
     }
 }
 
 async function syncData() {
-    if (!isOnline && !DEVELOPMENT_MODE) {
-        showToast('Servidor offline. Não é possível sincronizar.', 'error');
+    if (!isOnline) {
+        showToast('Sistema offline', 'error');
         return;
     }
 
-    showToast('Sincronizando dados...', 'info');
-    await loadVendas();
-    showToast('Dados sincronizados com sucesso!', 'success');
-}
-
-function changeMonth(direction) {
-    currentMonth.setMonth(currentMonth.getMonth() + direction);
-    updateDisplay();
-}
-
-function updateMonthDisplay() {
-    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    const monthName = months[currentMonth.getMonth()];
-    const year = currentMonth.getFullYear();
-    document.getElementById('currentMonth').textContent = `${monthName} ${year}`;
-}
-
-function toggleRelatorioMes() {
-    // Abrir modal com relatório do mês
-    const modal = document.getElementById('relatorioModal');
-    if (!modal) return;
+    showToast('Sincronizando...', 'success');
     
-    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
-                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    const monthName = months[currentMonth.getMonth()];
-    const year = currentMonth.getFullYear();
-    
-    document.getElementById('relatorioModalTitulo').textContent = `Relatório - ${monthName} ${year}`;
-    
-    // Filtrar apenas vendas PAGAS do mês atual
-    let vendasPagas = vendas.filter(v => {
-        if (!v.data_pagamento || v.status_pagamento !== 'PAGO') return false;
+    try {
+        const response = await fetch(`${API_URL}/sync`);
+        if (!response.ok) throw new Error('Erro na sincronização');
         
-        const dataPag = new Date(v.data_pagamento);
-        return dataPag.getMonth() === currentMonth.getMonth() &&
-               dataPag.getFullYear() === currentMonth.getFullYear();
-    });
-    
-    const modalBody = document.getElementById('relatorioModalBody');
-    
-    if (vendasPagas.length === 0) {
-        modalBody.innerHTML = `
-            <div style="text-align: center; padding: 3rem; color: var(--text-secondary);">
-                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="opacity: 0.3; margin-bottom: 1rem;">
-                    <circle cx="12" cy="12" r="10"></circle>
-                    <line x1="12" y1="8" x2="12" y2="12"></line>
-                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
-                </svg>
-                <p style="font-size: 1.1rem; font-weight: 600; margin: 0;">Nenhum Pagamento Encontrado</p>
-                <p style="font-size: 0.9rem; margin-top: 0.5rem;">Não há pagamentos registrados para ${monthName} ${year}</p>
-            </div>
-        `;
-    } else {
-        // Ordenar por data de pagamento crescente
-        vendasPagas.sort((a, b) => new Date(a.data_pagamento) - new Date(b.data_pagamento));
-        
-        const rows = vendasPagas.map(venda => `
-            <tr>
-                <td><strong>${venda.numero_nf || '-'}</strong></td>
-                <td>${formatDate(venda.data_emissao)}</td>
-                <td>${venda.nome_orgao || '-'}</td>
-                <td><strong>R$ ${parseFloat(venda.valor_nf || 0).toFixed(2).replace('.', ',')}</strong></td>
-                <td>${formatDate(venda.data_pagamento)}</td>
-                <td>${venda.banco || '-'}</td>
-            </tr>
-        `).join('');
-        
-        const totalPago = vendasPagas.reduce((sum, v) => sum + parseFloat(v.valor_nf || 0), 0);
-        
-        modalBody.innerHTML = `
-            <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.3);">
-                <div style="display: flex; justify-content: space-between; align-items: center;">
-                    <div>
-                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Total Pago no Período</p>
-                        <p style="color: #15803D; font-size: 1.75rem; font-weight: 700; margin: 0.25rem 0 0 0;">R$ ${totalPago.toFixed(2).replace('.', ',')}</p>
-                    </div>
-                    <div style="text-align: right;">
-                        <p style="color: var(--text-secondary); font-size: 0.85rem; margin: 0;">Quantidade de NFsn</p>
-                        <p style="color: #15803D; font-size: 1.75rem; font-weight: 700; margin: 0.25rem 0 0 0;">${vendasPagas.length}</p>
-                    </div>
-                </div>
-            </div>
-            
-            <div style="overflow-x: auto;">
-                <table style="width: 100%; border-collapse: collapse;">
-                    <thead>
-                        <tr style="background: var(--th-bg); color: var(--th-color);">
-                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Nº NF</th>
-                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Emissão</th>
-                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Órgão</th>
-                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Valor</th>
-                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Pagamento</th>
-                            <th style="padding: 12px; text-align: left; border: 1px solid var(--border-color);">Banco</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${rows}
-                    </tbody>
-                </table>
-            </div>
-        `;
+        await loadVendas();
+        showToast('Dados sincronizados!', 'success');
+    } catch (error) {
+        console.error('Erro ao sincronizar:', error);
+        showToast('Erro ao sincronizar', 'error');
     }
-    
-    modal.classList.add('show');
 }
 
-function closeRelatorioModal() {
-    const modal = document.getElementById('relatorioModal');
-    if (modal) modal.classList.remove('show');
+async function loadVendas() {
+    if (!isOnline) return;
+
+    try {
+        const response = await fetch(`${API_URL}/vendas`);
+        if (!response.ok) throw new Error('Erro ao carregar vendas');
+
+        const data = await response.json();
+        allVendas = data;
+        
+        const newHash = JSON.stringify(allVendas.map(v => v.id));
+        if (newHash !== lastDataHash) {
+            lastDataHash = newHash;
+            updateDisplay();
+        }
+
+        await loadDashboard();
+    } catch (error) {
+        console.error('❌ Erro ao carregar vendas:', error);
+    }
 }
 
-function updateDisplay() {
-    updateMonthDisplay();
-    updateDashboard();
+async function loadDashboard() {
+    try {
+        const monthVendas = allVendas.filter(v => {
+            const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
+            return dataEmissao.getMonth() === currentMonth.getMonth() && 
+                   dataEmissao.getFullYear() === currentMonth.getFullYear();
+        });
+
+        const stats = {
+            pago: 0,
+            aReceber: 0,
+            entregue: 0,
+            faturado: 0
+        };
+
+        monthVendas.forEach(venda => {
+            const valor = parseFloat(venda.valor_nf) || 0;
+            stats.faturado += valor;
+
+            if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
+                stats.pago += valor;
+            } else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
+                stats.aReceber += valor;
+                stats.entregue += 1;
+            }
+        });
+        
+        const pagoElem = document.getElementById('totalPago');
+        const receberElem = document.getElementById('totalAReceber');
+        const entregueElem = document.getElementById('totalEntregue');
+        const faturadoElem = document.getElementById('totalFaturado');
+        
+        if (pagoElem) pagoElem.textContent = formatCurrency(stats.pago);
+        if (receberElem) receberElem.textContent = formatCurrency(stats.aReceber);
+        if (entregueElem) entregueElem.textContent = stats.entregue;
+        if (faturadoElem) faturadoElem.textContent = formatCurrency(stats.faturado);
+    } catch (error) {
+        console.error('❌ Erro ao carregar dashboard:', error);
+    }
+}
+
+function filterVendas() {
     updateTable();
 }
 
-function updateDashboard() {
-    // NOVOS DASHBOARDS: PAGO | A RECEBER | ENTREGUE | FATURADO
-    let totalPago = 0;
-    let totalAReceber = 0;
-    let quantidadeEntregue = 0;
-    let totalFaturado = 0;
-    
-    vendas.forEach(venda => {
-        const valor = parseFloat(venda.valor_nf || 0);
-        
-        // FATURADO: Soma TUDO (pagos + não pagos)
-        totalFaturado += valor;
-        
-        // PAGO: Apenas registros com origem CONTAS_RECEBER e is_pago = true
-        if (venda.is_pago === true || (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento)) {
-            totalPago += valor;
-        }
-        // A RECEBER: Apenas registros de CONTROLE_FRETE (entregues mas não pagos)
-        else if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
-            totalAReceber += valor;
-        }
-        
-        // ENTREGUE: Quantidade de NFs que vieram do Controle de Frete marcadas como entregue
-        if (venda.origem === 'CONTROLE_FRETE' && venda.status_frete === 'ENTREGUE') {
-            quantidadeEntregue++;
-        }
-        // OU notas pagas (que também são consideradas entregues)
-        else if (venda.is_pago === true || venda.origem === 'CONTAS_RECEBER') {
-            quantidadeEntregue++;
-        }
-    });
-    
-    document.getElementById('totalPago').textContent = formatCurrency(totalPago);
-    document.getElementById('totalAReceber').textContent = formatCurrency(totalAReceber);
-    document.getElementById('totalEntregue').textContent = quantidadeEntregue;
-    document.getElementById('totalFaturado').textContent = formatCurrency(totalFaturado);
+function updateDisplay() {
+    updateTable();
+    loadDashboard();
 }
 
 function updateTable() {
     const container = document.getElementById('vendasContainer');
-    let filteredVendas = getVendasForCurrentMonth();
+    if (!container) return;
     
-    const search = document.getElementById('search').value.toLowerCase();
-    const filterStatus = document.getElementById('filterStatus').value;
+    const monthVendas = allVendas.filter(v => {
+        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
+        return dataEmissao.getMonth() === currentMonth.getMonth() && 
+               dataEmissao.getFullYear() === currentMonth.getFullYear();
+    });
+    
+    let filteredVendas = [...monthVendas];
+    
+    const searchElem = document.getElementById('search');
+    const filterStatusElem = document.getElementById('filterStatus');
+    
+    const search = searchElem ? searchElem.value.toLowerCase() : '';
+    const filterStatus = filterStatusElem ? filterStatusElem.value : '';
     
     if (search) {
         filteredVendas = filteredVendas.filter(v => 
@@ -328,10 +319,12 @@ function updateTable() {
         );
     }
     
-    if (filterStatus === 'PAGO') {
-        filteredVendas = filteredVendas.filter(v => v.is_pago === true || v.origem === 'CONTAS_RECEBER');
-    } else if (filterStatus === 'ENTREGUE') {
-        filteredVendas = filteredVendas.filter(v => v.origem === 'CONTROLE_FRETE' && v.status_frete === 'ENTREGUE');
+    if (filterStatus) {
+        filteredVendas = filteredVendas.filter(v => {
+            if (filterStatus === 'PAGO') return v.origem === 'CONTAS_RECEBER' && v.data_pagamento;
+            if (v.origem === 'CONTROLE_FRETE') return v.status_frete === filterStatus;
+            return false;
+        });
     }
     
     if (filteredVendas.length === 0) {
@@ -345,90 +338,119 @@ function updateTable() {
         return;
     }
     
-    // ORDENAR CRESCENTE por data de emissão
-    filteredVendas.sort((a, b) => new Date(a.data_emissao) - new Date(b.data_emissao));
-    
     container.innerHTML = filteredVendas.map(venda => {
-        let status = 'ENTREGUE';
-        let statusClass = 'reprovada';
-        let rowClass = '';
+        const status = getStatus(venda);
+        let statusClass = '';
         
-        // Verificar se é PAGO (destaque verde)
-        if (venda.is_pago === true || venda.origem === 'CONTAS_RECEBER') {
-            status = 'PAGO';
-            statusClass = 'aprovada';
-            rowClass = 'row-pago';  // Classe para destacar linha inteira em verde
+        if (status === 'PAGO') {
+            statusClass = 'pago';
+        } else if (status === 'ENTREGUE') {
+            statusClass = 'entregue';
+        } else if (status === 'EM_TRANSITO') {
+            statusClass = 'transito';
+        } else if (status === 'AGUARDANDO_COLETA') {
+            statusClass = 'aguardando';
+        } else if (status === 'EXTRAVIADO') {
+            statusClass = 'extraviado';
+        } else if (status === 'DEVOLVIDO') {
+            statusClass = 'devolvido';
         }
         
         return `
-        <tr class="${rowClass}">
-            <td><strong>${venda.numero_nf || '-'}</strong></td>
-            <td>${formatDate(venda.data_emissao)}</td>
-            <td>${venda.nome_orgao || '-'}</td>
-            <td><strong>R$ ${parseFloat(venda.valor_nf || 0).toFixed(2).replace('.', ',')}</strong></td>
-            <td>${venda.tipo_nf || '-'}</td>
-            <td>
-                <span class="badge ${statusClass}">${status}</span>
-            </td>
-            <td class="actions-cell">
-                <div class="actions">
-                    <button onclick="viewVenda('${venda.id}')" class="action-btn view" title="Ver detalhes">Ver</button>
-                </div>
-            </td>
-        </tr>
-    `;
+            <tr class="${status === 'PAGO' ? 'row-pago' : ''}">
+                <td><strong>${venda.numero_nf}</strong></td>
+                <td style="white-space: nowrap;">${formatDate(venda.data_emissao)}</td>
+                <td>${venda.nome_orgao}</td>
+                <td><strong>${formatCurrency(venda.valor_nf)}</strong></td>
+                <td>${venda.tipo_nf || '-'}</td>
+                <td>
+                    <span class="badge ${statusClass}">${status.replace(/_/g, ' ')}</span>
+                </td>
+                <td class="actions-cell">
+                    <div class="actions">
+                        <button onclick="viewVenda('${venda.id}')" class="action-btn view" title="Ver detalhes">Ver</button>
+                    </div>
+                </td>
+            </tr>
+        `;
     }).join('');
 }
 
-function getVendasForCurrentMonth() {
-    return vendas.filter(venda => {
-        const vendaDate = new Date(venda.data_emissao);
-        return vendaDate.getMonth() === currentMonth.getMonth() &&
-               vendaDate.getFullYear() === currentMonth.getFullYear();
-    });
-}
-
-function filterVendas() {
-    updateTable();
+function getStatus(venda) {
+    if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
+        return 'PAGO';
+    }
+    if (venda.origem === 'CONTROLE_FRETE') {
+        // Retornar o status real do frete
+        return venda.status_frete || 'EM_TRANSITO';
+    }
+    return 'EM_TRANSITO';
 }
 
 function viewVenda(id) {
-    const venda = vendas.find(v => v.id === id);
+    const venda = allVendas.find(v => v.id === id);
     if (!venda) return;
     
-    document.getElementById('modalNumeroNF').textContent = venda.numero_nf || '-';
+    const nfElem = document.getElementById('modalNumeroNF');
+    if (nfElem) nfElem.textContent = venda.numero_nf;
     
     const modalBody = document.getElementById('modalBody');
-    modalBody.innerHTML = `
-        <div class="info-section">
-            <h4>Informações Gerais</h4>
-            <p><strong>Nº NF:</strong> ${venda.numero_nf || '-'}</p>
-            <p><strong>Data Emissão:</strong> ${formatDate(venda.data_emissao)}</p>
-            <p><strong>Órgão:</strong> ${venda.nome_orgao || '-'}</p>
-            <p><strong>Valor:</strong> R$ ${parseFloat(venda.valor_nf || 0).toFixed(2).replace('.', ',')}</p>
-            <p><strong>Tipo:</strong> ${venda.tipo_nf || '-'}</p>
-            ${venda.transportadora ? `<p><strong>Transportadora:</strong> ${venda.transportadora}</p>` : ''}
-            ${venda.previsao_entrega ? `<p><strong>Previsão Entrega:</strong> ${formatDate(venda.previsao_entrega)}</p>` : ''}
-            ${venda.data_pagamento ? `<p><strong>Data Pagamento:</strong> ${formatDate(venda.data_pagamento)}</p>` : ''}
-            ${venda.observacoes ? `<p><strong>Observações:</strong> ${venda.observacoes}</p>` : ''}
-        </div>
-    `;
+    if (!modalBody) return;
     
-    document.getElementById('infoModal').classList.add('show');
+    if (venda.origem === 'CONTAS_RECEBER') {
+        modalBody.innerHTML = `
+            <div class="info-section">
+                <h4>Informações da Conta</h4>
+                <p><strong>Número NF:</strong> ${venda.numero_nf}</p>
+                <p><strong>Órgão:</strong> ${venda.nome_orgao}</p>
+                <p><strong>Valor:</strong> ${formatCurrency(venda.valor_nf)}</p>
+                <p><strong>Data Emissão:</strong> ${formatDate(venda.data_emissao)}</p>
+                <p><strong>Data Vencimento:</strong> ${formatDate(venda.data_vencimento)}</p>
+                <p><strong>Data Pagamento:</strong> ${venda.data_pagamento ? formatDate(venda.data_pagamento) : '-'}</p>
+                <p><strong>Banco:</strong> ${venda.banco || '-'}</p>
+                <p><strong>Status:</strong> <span class="badge pago">${venda.status_pagamento}</span></p>
+                ${venda.observacoes ? `<p><strong>Observações:</strong> ${venda.observacoes}</p>` : ''}
+            </div>
+        `;
+    } else {
+        modalBody.innerHTML = `
+            <div class="info-section">
+                <h4>Informações do Frete</h4>
+                <p><strong>Número NF:</strong> ${venda.numero_nf}</p>
+                <p><strong>Órgão:</strong> ${venda.nome_orgao}</p>
+                <p><strong>Valor NF:</strong> ${formatCurrency(venda.valor_nf)}</p>
+                <p><strong>Data Emissão:</strong> ${formatDate(venda.data_emissao)}</p>
+                ${venda.documento ? `<p><strong>Documento:</strong> ${venda.documento}</p>` : ''}
+                ${venda.contato_orgao ? `<p><strong>Contato:</strong> ${venda.contato_orgao}</p>` : ''}
+                <p><strong>Transportadora:</strong> ${venda.transportadora || '-'}</p>
+                <p><strong>Valor Frete:</strong> ${formatCurrency(venda.valor_frete)}</p>
+                ${venda.data_coleta ? `<p><strong>Data Coleta:</strong> ${formatDate(venda.data_coleta)}</p>` : ''}
+                ${venda.cidade_destino ? `<p><strong>Cidade Destino:</strong> ${venda.cidade_destino}</p>` : ''}
+                ${venda.previsao_entrega ? `<p><strong>Previsão Entrega:</strong> ${formatDate(venda.previsao_entrega)}</p>` : ''}
+                <p><strong>Status:</strong> <span class="badge entregue">${venda.status_frete}</span></p>
+            </div>
+        `;
+    }
+    
+    const modal = document.getElementById('infoModal');
+    if (modal) modal.classList.add('show');
 }
 
 function closeInfoModal() {
-    document.getElementById('infoModal').classList.remove('show');
+    const modal = document.getElementById('infoModal');
+    if (modal) modal.classList.remove('show');
 }
 
 function formatDate(dateString) {
     if (!dateString) return '-';
-    const date = new Date(dateString);
+    const date = new Date(dateString + 'T00:00:00');
     return date.toLocaleDateString('pt-BR');
 }
 
 function formatCurrency(value) {
-    return `R$ ${parseFloat(value).toFixed(2).replace('.', ',')}`;
+    if (!value) return 'R$ 0,00';
+    const num = parseFloat(value);
+    return `R$ ${num.toFixed(2).replace('.', ',')}`;
 }
 
 function showToast(message, type = 'success') {
@@ -442,55 +464,7 @@ function showToast(message, type = 'success') {
     document.body.appendChild(messageDiv);
     
     setTimeout(() => {
-        messageDiv.style.animation = 'slideOut 0.3s ease forwards';
+        messageDiv.style.animation = 'slideOutBottom 0.3s ease forwards';
         setTimeout(() => messageDiv.remove(), 300);
     }, 3000);
-}
-
-// CALENDAR FUNCTIONS
-let calendarYear = new Date().getFullYear();
-
-function initCalendar() {
-    calendarYear = currentMonth.getFullYear();
-    renderCalendar();
-}
-
-function toggleCalendar() {
-    const modal = document.getElementById('calendarModal');
-    if (modal.style.display === 'flex') {
-        modal.style.display = 'none';
-    } else {
-        modal.style.display = 'flex';
-        document.getElementById('calendarYear').textContent = calendarYear;
-        renderCalendar();
-    }
-}
-
-function changeCalendarYear(direction) {
-    calendarYear += direction;
-    document.getElementById('calendarYear').textContent = calendarYear;
-    renderCalendar();
-}
-
-function renderCalendar() {
-    const months = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho',
-                    'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
-    
-    const container = document.getElementById('calendarMonths');
-    container.innerHTML = months.map((month, index) => {
-        const isCurrentMonth = index === currentMonth.getMonth() && 
-                              calendarYear === currentMonth.getFullYear();
-        return `
-            <button class="month-btn ${isCurrentMonth ? 'active' : ''}" 
-                    onclick="selectMonth(${index})">
-                ${month}
-            </button>
-        `;
-    }).join('');
-}
-
-function selectMonth(monthIndex) {
-    currentMonth = new Date(calendarYear, monthIndex, 1);
-    toggleCalendar();
-    updateDisplay();
 }
