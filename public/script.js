@@ -204,6 +204,12 @@ function gerarRelatorioMes() {
                         </tr>
                     `).join('')}
                 </tbody>
+                <tfoot>
+                    <tr style="background: rgba(34, 197, 94, 0.1); border-top: 3px solid #22C55E;">
+                        <td colspan="4" style="padding: 14px 12px; border: 1px solid var(--border-color); font-weight: 700; font-size: 1rem; color: var(--text-primary);">TOTAL GERAL</td>
+                        <td style="padding: 14px 12px; border: 1px solid var(--border-color); text-align: right; font-weight: 700; font-size: 1.1rem; color: #22C55E;">${formatCurrency(totalPago)}</td>
+                    </tr>
+                </tfoot>
             </table>
         </div>
     `;
