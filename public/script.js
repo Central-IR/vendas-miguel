@@ -117,60 +117,113 @@ function selectMonth(monthIndex) {
     toggleCalendar();
 }
 
-function toggleChartModal() {
-    const modal = document.getElementById('chartModal');
+// NOVA FUNÇÃO: Toggle do Modal de Relatório Mensal
+function toggleRelatorioMes() {
+    const modal = document.getElementById('relatorioModal');
     if (!modal) return;
     
     if (modal.classList.contains('show')) {
         modal.classList.remove('show');
     } else {
-        calculateAnnualStats();
+        gerarRelatorioMes();
         modal.classList.add('show');
     }
 }
 
-function calculateAnnualStats() {
-    const year = currentMonth.getFullYear();
-    const yearElem = document.getElementById('chartYear');
-    if (yearElem) yearElem.textContent = year;
+// NOVA FUNÇÃO: Gerar Relatório do Mês
+function gerarRelatorioMes() {
+    const monthNames = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 
+                        'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
     
-    const yearVendas = allVendas.filter(v => {
-        const dataEmissao = new Date(v.data_emissao + 'T00:00:00');
-        return dataEmissao.getFullYear() === year;
-    });
+    // Atualizar título do modal
+    const tituloElem = document.getElementById('relatorioModalTitulo');
+    if (tituloElem) {
+        tituloElem.textContent = `Relatório de Pagamentos - ${monthNames[currentMonth.getMonth()]} ${currentMonth.getFullYear()}`;
+    }
     
-    let faturado = 0;
-    let pago = 0;
-    
-    yearVendas.forEach(venda => {
-        const valor = parseFloat(venda.valor_nf) || 0;
-        faturado += valor;
+    // Filtrar apenas vendas pagas do mês atual
+    const vendasPagas = allVendas.filter(v => {
+        if (v.origem !== 'CONTAS_RECEBER' || !v.data_pagamento) return false;
         
-        if (venda.origem === 'CONTAS_RECEBER' && venda.data_pagamento) {
-            pago += valor;
-        }
+        const dataPagamento = new Date(v.data_pagamento + 'T00:00:00');
+        return dataPagamento.getMonth() === currentMonth.getMonth() && 
+               dataPagamento.getFullYear() === currentMonth.getFullYear();
     });
     
-    const pendente = faturado - pago;
+    const bodyElem = document.getElementById('relatorioModalBody');
+    if (!bodyElem) return;
     
-    const faturadoElem = document.getElementById('chartFaturado');
-    const pagoElem = document.getElementById('chartPago');
-    const pendenteElem = document.getElementById('chartPendente');
+    if (vendasPagas.length === 0) {
+        bodyElem.innerHTML = `
+            <div style="text-align: center; padding: 3rem 1rem; color: var(--text-secondary);">
+                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin: 0 auto 1rem; opacity: 0.5;">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+                <p style="font-size: 1.1rem; font-weight: 600;">Nenhum pagamento registrado neste mês</p>
+            </div>
+        `;
+        return;
+    }
     
-    if (faturadoElem) faturadoElem.textContent = formatCurrency(faturado);
-    if (pagoElem) pagoElem.textContent = formatCurrency(pago);
-    if (pendenteElem) pendenteElem.textContent = formatCurrency(pendente);
+    // Calcular total pago
+    const totalPago = vendasPagas.reduce((sum, v) => sum + (parseFloat(v.valor_nf) || 0), 0);
+    
+    // Gerar HTML da tabela
+    bodyElem.innerHTML = `
+        <div style="margin-bottom: 1.5rem; padding: 1rem; background: rgba(34, 197, 94, 0.1); border-radius: 8px; border: 1px solid rgba(34, 197, 94, 0.3);">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <span style="font-weight: 600; color: var(--text-primary);">Total de Pagamentos:</span>
+                <span style="font-size: 1.5rem; font-weight: 700; color: #22C55E;">${formatCurrency(totalPago)}</span>
+            </div>
+            <div style="margin-top: 0.5rem; color: var(--text-secondary); font-size: 0.9rem;">
+                ${vendasPagas.length} pagamento${vendasPagas.length !== 1 ? 's' : ''} registrado${vendasPagas.length !== 1 ? 's' : ''}
+            </div>
+        </div>
+        
+        <div style="overflow-x: auto;">
+            <table style="width: 100%; border-collapse: collapse;">
+                <thead>
+                    <tr style="background: var(--th-bg); color: var(--th-color);">
+                        <th style="padding: 12px; text-align: left; border: 1px solid var(--th-border); font-weight: 600;">Nº NF</th>
+                        <th style="padding: 12px; text-align: left; border: 1px solid var(--th-border); font-weight: 600;">Órgão</th>
+                        <th style="padding: 12px; text-align: left; border: 1px solid var(--th-border); font-weight: 600;">Data Emissão</th>
+                        <th style="padding: 12px; text-align: left; border: 1px solid var(--th-border); font-weight: 600;">Data Pagamento</th>
+                        <th style="padding: 12px; text-align: right; border: 1px solid var(--th-border); font-weight: 600;">Valor</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    ${vendasPagas.map((venda, index) => `
+                        <tr style="background: ${index % 2 === 0 ? 'var(--bg-card)' : 'var(--table-stripe)'};">
+                            <td style="padding: 12px; border: 1px solid var(--border-color);"><strong>${venda.numero_nf}</strong></td>
+                            <td style="padding: 12px; border: 1px solid var(--border-color);">${venda.nome_orgao}</td>
+                            <td style="padding: 12px; border: 1px solid var(--border-color); white-space: nowrap;">${formatDate(venda.data_emissao)}</td>
+                            <td style="padding: 12px; border: 1px solid var(--border-color); white-space: nowrap;">${formatDate(venda.data_pagamento)}</td>
+                            <td style="padding: 12px; border: 1px solid var(--border-color); text-align: right;"><strong>${formatCurrency(venda.valor_nf)}</strong></td>
+                        </tr>
+                    `).join('')}
+                </tbody>
+            </table>
+        </div>
+    `;
+}
+
+// NOVA FUNÇÃO: Fechar Modal de Relatório
+function closeRelatorioModal() {
+    const modal = document.getElementById('relatorioModal');
+    if (modal) modal.classList.remove('show');
 }
 
 document.addEventListener('click', (e) => {
     const calendarModal = document.getElementById('calendarModal');
-    const chartModal = document.getElementById('chartModal');
+    const relatorioModal = document.getElementById('relatorioModal');
     
     if (calendarModal && e.target === calendarModal) {
         calendarModal.classList.remove('show');
     }
-    if (chartModal && e.target === chartModal) {
-        chartModal.classList.remove('show');
+    if (relatorioModal && e.target === relatorioModal) {
+        relatorioModal.classList.remove('show');
     }
 });
 
@@ -223,24 +276,18 @@ async function syncData() {
 }
 
 async function loadVendas() {
-    if (!isOnline) return;
-
     try {
         const response = await fetch(`${API_URL}/vendas`);
         if (!response.ok) throw new Error('Erro ao carregar vendas');
-
-        const data = await response.json();
-        allVendas = data;
         
-        const newHash = JSON.stringify(allVendas.map(v => v.id));
-        if (newHash !== lastDataHash) {
-            lastDataHash = newHash;
-            updateDisplay();
-        }
-
-        await loadDashboard();
+        const data = await response.json();
+        allVendas = data || [];
+        
+        updateDisplay();
     } catch (error) {
         console.error('❌ Erro ao carregar vendas:', error);
+        isOnline = false;
+        updateConnectionStatus();
     }
 }
 
@@ -330,7 +377,7 @@ function updateTable() {
     if (filteredVendas.length === 0) {
         container.innerHTML = `
             <tr>
-                <td colspan="7" style="text-align: center; padding: 2rem;">
+                <td colspan="6" style="text-align: center; padding: 2rem;">
                     Nenhuma venda encontrada
                 </td>
             </tr>
@@ -341,11 +388,14 @@ function updateTable() {
     container.innerHTML = filteredVendas.map(venda => {
         const status = getStatus(venda);
         let statusClass = '';
+        let rowClass = '';
         
         if (status === 'PAGO') {
             statusClass = 'pago';
+            rowClass = 'row-pago';
         } else if (status === 'ENTREGUE') {
             statusClass = 'entregue';
+            rowClass = 'row-entregue';
         } else if (status === 'EM_TRANSITO') {
             statusClass = 'transito';
         } else if (status === 'AGUARDANDO_COLETA') {
@@ -357,12 +407,11 @@ function updateTable() {
         }
         
         return `
-            <tr class="${status === 'PAGO' ? 'row-pago' : ''}">
+            <tr class="${rowClass}">
                 <td><strong>${venda.numero_nf}</strong></td>
                 <td style="white-space: nowrap;">${formatDate(venda.data_emissao)}</td>
                 <td>${venda.nome_orgao}</td>
                 <td><strong>${formatCurrency(venda.valor_nf)}</strong></td>
-                <td>${venda.tipo_nf || '-'}</td>
                 <td>
                     <span class="badge ${statusClass}">${status.replace(/_/g, ' ')}</span>
                 </td>
@@ -447,10 +496,16 @@ function formatDate(dateString) {
     return date.toLocaleDateString('pt-BR');
 }
 
+// FUNÇÃO ATUALIZADA: Formatação monetária com separadores de milhares
 function formatCurrency(value) {
     if (!value) return 'R$ 0,00';
     const num = parseFloat(value);
-    return `R$ ${num.toFixed(2).replace('.', ',')}`;
+    return num.toLocaleString('pt-BR', {
+        style: 'currency',
+        currency: 'BRL',
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2
+    });
 }
 
 function showToast(message, type = 'success') {
