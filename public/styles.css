@@ -12,7 +12,7 @@
     --warning-color: #F59E0B;
     --info-color: #3B82F6;
     --table-stripe: #FAFAFA;
-    --table-hover: rgba(0, 0, 0, 0.02);
+    --table-hover: rgba(0, 0, 0, 0.015);
     --card-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
     --th-bg: #6B7280;
     --th-color: #FFFFFF;
@@ -41,7 +41,7 @@
         --th-color: #FFFFFF;
         --th-border: #5A5A5A;
         --shadow: rgba(0, 0, 0, 0.3);
-        --table-hover: rgba(128, 128, 128, 0.15);
+        --table-hover: rgba(128, 128, 128, 0.08);
     }
 }
 
@@ -412,7 +412,9 @@ h2 {
     color: var(--primary);
 }
 
-/* CALENDAR MODAL */
+/* ============================================
+   CALENDAR MODAL
+   ============================================ */
 .calendar-modal {
     display: none;
     position: fixed;
@@ -420,36 +422,40 @@ h2 {
     left: 0;
     right: 0;
     bottom: 0;
-    background: rgba(0, 0, 0, 0.5);
+    background: rgba(0, 0, 0, 0.6);
     backdrop-filter: blur(4px);
     align-items: center;
     justify-content: center;
-    z-index: 9999;
-    padding: 1rem;
+    z-index: 10000;
+    opacity: 0;
+    animation: fadeIn 0.2s ease forwards;
+}
+
+.calendar-modal.show {
+    display: flex;
 }
 
 .calendar-content {
     background: var(--bg-card);
     border-radius: 16px;
     padding: 2rem;
-    max-width: 600px;
-    width: 100%;
+    max-width: 500px;
+    width: 90%;
     box-shadow: 0 20px 60px var(--shadow);
     border: 1px solid var(--border-color);
+    transform: scale(0.9);
+    animation: scaleIn 0.2s ease forwards;
 }
 
 .calendar-header {
     display: flex;
-    align-items: center;
     justify-content: space-between;
+    align-items: center;
     margin-bottom: 1.5rem;
-    padding-bottom: 1rem;
-    border-bottom: 2px solid var(--border-color);
 }
 
 .calendar-header h3 {
     font-size: 1.5rem;
-    font-weight: 700;
     color: var(--text-primary);
     margin: 0;
 }
@@ -478,37 +484,36 @@ h2 {
     gap: 0.75rem;
 }
 
-.month-btn {
-    background: var(--input-bg);
-    border: 1px solid var(--border-color);
-    color: var(--text-primary);
+.calendar-month {
     padding: 1rem;
+    text-align: center;
+    background: var(--input-bg);
+    border: 2px solid var(--border-color);
     border-radius: 8px;
     cursor: pointer;
-    font-size: 0.9rem;
-    font-weight: 600;
+    font-weight: 500;
     transition: all 0.2s ease;
 }
 
-.month-btn:hover {
+.calendar-month:hover {
     background: rgba(204, 112, 0, 0.1);
     border-color: var(--primary);
-    transform: translateY(-2px);
+    color: var(--primary);
 }
 
-.month-btn.active {
+.calendar-month.current {
     background: var(--primary);
     color: white;
     border-color: var(--primary);
 }
 
 /* ============================================
-   DASHBOARD STATS
+   DASHBOARD CARDS
    ============================================ */
 .dashboard-grid {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 1.25rem;
+    gap: 1rem;
     margin-bottom: 1.5rem;
 }
 
@@ -517,46 +522,48 @@ h2 {
     padding: 1.5rem;
     border-radius: 12px;
     border: 1px solid var(--border-color);
-    box-shadow: var(--card-shadow);
     display: flex;
-    gap: 1rem;
     align-items: center;
+    gap: 1rem;
     transition: all 0.3s ease;
+    box-shadow: var(--card-shadow);
 }
 
 .stat-card:hover {
     transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    box-shadow: 0 4px 12px var(--shadow);
 }
 
 .stat-icon {
     width: 48px;
     height: 48px;
-    border-radius: 10px;
+    border-radius: 12px;
     display: flex;
     align-items: center;
     justify-content: center;
     flex-shrink: 0;
-}
-
-.stat-icon-default {
-    background: rgba(107, 114, 128, 0.1);
-    color: var(--btn-edit);
+    background: var(--input-bg);
+    color: var(--text-secondary);
 }
 
 .stat-icon-success {
-    background: rgba(34, 197, 94, 0.1);
-    color: var(--success-color);
+    background: rgba(34, 197, 94, 0.15);
+    color: #22C55E;
 }
 
 .stat-icon-warning {
-    background: rgba(245, 158, 11, 0.1);
-    color: var(--warning-color);
+    background: rgba(245, 158, 11, 0.15);
+    color: #F59E0B;
 }
 
 .stat-icon-info {
-    background: rgba(59, 130, 246, 0.1);
-    color: var(--info-color);
+    background: rgba(59, 130, 246, 0.15);
+    color: #3B82F6;
+}
+
+.stat-icon-default {
+    background: rgba(107, 114, 128, 0.15);
+    color: #6B7280;
 }
 
 .stat-content {
@@ -568,25 +575,25 @@ h2 {
     font-weight: 700;
     color: var(--text-primary);
     line-height: 1.2;
-    margin-bottom: 0.25rem;
 }
 
 .stat-value-success {
-    color: var(--success-color);
+    color: #22C55E;
 }
 
 .stat-value-warning {
-    color: var(--warning-color);
+    color: #F59E0B;
 }
 
 .stat-value-info {
-    color: var(--info-color);
+    color: #3B82F6;
 }
 
 .stat-label {
-    font-size: 0.85rem;
+    font-size: 0.875rem;
     color: var(--text-secondary);
     font-weight: 500;
+    margin-top: 0.25rem;
 }
 
 /* ============================================
@@ -594,183 +601,128 @@ h2 {
    ============================================ */
 table {
     width: 100%;
-    border-collapse: separate;
-    border-spacing: 0;
-    background: var(--bg-card);
-    font-size: 0.9rem;
+    border-collapse: collapse;
 }
 
-thead {
-    position: sticky;
-    top: 0;
-    z-index: 10;
+thead tr {
+    background: var(--th-bg);
 }
 
 th {
-    background: var(--th-bg);
-    color: var(--th-color);
-    padding: 14px 16px;
+    padding: 14px 12px;
     text-align: left;
     font-weight: 600;
-    font-size: 0.85rem;
+    color: var(--th-color);
+    font-size: 0.875rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    border-bottom: 2px solid var(--th-border);
-}
-
-th:first-child {
-    border-top-left-radius: 12px;
-}
-
-th:last-child {
-    border-top-right-radius: 12px;
+    border: 1px solid var(--th-border);
 }
 
 tbody tr {
-    background: var(--bg-card);
-    transition: all 0.2s ease;
     border-bottom: 1px solid var(--border-color);
+    transition: background-color 0.15s ease;
 }
 
 tbody tr:nth-child(even) {
     background: var(--table-stripe);
 }
 
+/* HOVER MINIMIZADO - apenas uma mudança sutil */
 tbody tr:hover {
     background: var(--table-hover);
-    transform: scale(1.005);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
 }
 
 td {
-    padding: 14px 16px;
+    padding: 14px 12px;
+    border: 1px solid var(--border-color);
+    font-size: 0.9rem;
+}
+
+/* DESTAQUE PARA LINHAS PAGAS (verde) */
+tbody tr.row-pago {
+    background: rgba(34, 197, 94, 0.12) !important;
+    border-left: 3px solid #22C55E;
+}
+
+tbody tr.row-pago:hover {
+    background: rgba(34, 197, 94, 0.16) !important;
+}
+
+/* NOVO: DESTAQUE PARA LINHAS ENTREGUE (azul - mesma cor do dashboard) */
+tbody tr.row-entregue {
+    background: rgba(59, 130, 246, 0.12) !important;
+    border-left: 3px solid #3B82F6;
+}
+
+tbody tr.row-entregue:hover {
+    background: rgba(59, 130, 246, 0.16) !important;
+}
+
+tbody tr.row-pago td,
+tbody tr.row-entregue td {
     color: var(--text-primary);
-    vertical-align: middle;
 }
 
-tbody tr:last-child td:first-child {
-    border-bottom-left-radius: 12px;
-}
-
-tbody tr:last-child td:last-child {
-    border-bottom-right-radius: 12px;
-}
-
-/* BADGES */
+/* BADGES DE STATUS */
 .badge {
     display: inline-block;
     padding: 6px 12px;
     border-radius: 6px;
-    font-size: 0.75rem;
+    font-size: 0.8rem;
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.3px;
 }
 
-.badge.aprovada {
-    background: rgba(34, 197, 94, 0.1);
-    color: #15803D;
+.badge.pago {
+    background: rgba(34, 197, 94, 0.15);
+    color: #059669;
     border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
-.badge.reprovada {
-    background: rgba(239, 68, 68, 0.1);
-    color: #B91C1C;
-    border: 1px solid rgba(239, 68, 68, 0.3);
+.badge.entregue {
+    background: rgba(59, 130, 246, 0.15);
+    color: #2563EB;
+    border: 1px solid rgba(59, 130, 246, 0.3);
 }
 
-.badge.pendente {
-    background: rgba(245, 158, 11, 0.1);
+.badge.transito {
+    background: rgba(245, 158, 11, 0.15);
     color: #D97706;
     border: 1px solid rgba(245, 158, 11, 0.3);
 }
 
-.badge.em-analise {
-    background: rgba(59, 130, 246, 0.1);
-    color: #1E40AF;
-    border: 1px solid rgba(59, 130, 246, 0.3);
-}
-
-.badge.cancelada {
-    background: rgba(107, 114, 128, 0.1);
+.badge.aguardando {
+    background: rgba(107, 114, 128, 0.15);
     color: #4B5563;
     border: 1px solid rgba(107, 114, 128, 0.3);
 }
 
-/* ============================================
-   FORM ELEMENTS
-   ============================================ */
-.form-group {
-    margin-bottom: 1.25rem;
+.badge.extraviado {
+    background: rgba(239, 68, 68, 0.15);
+    color: #DC2626;
+    border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
-.form-group label {
-    display: block;
-    margin-bottom: 0.5rem;
-    color: var(--text-primary);
-    font-weight: 600;
-    font-size: 0.9rem;
-}
-
-.form-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr);
-    gap: 1.25rem;
-}
-
-.form-grid-3 {
-    grid-template-columns: repeat(3, 1fr);
-}
-
-.full-width {
-    grid-column: 1 / -1;
-}
-
-input[type="text"],
-input[type="date"],
-input[type="number"],
-input[type="email"],
-input[type="tel"],
-textarea,
-select {
-    width: 100%;
-    padding: 12px;
-    border: 1px solid var(--border-color);
-    border-radius: 8px;
-    background: var(--input-bg);
-    color: var(--text-primary);
-    font-size: 0.9rem;
-    font-family: inherit;
-    transition: all 0.3s ease;
-}
-
-input:focus,
-textarea:focus,
-select:focus {
-    outline: none;
-    border-color: var(--primary);
-    background: var(--bg-card);
-    box-shadow: 0 0 0 3px rgba(204, 112, 0, 0.1);
-}
-
-textarea {
-    min-height: 100px;
-    resize: vertical;
+.badge.devolvido {
+    background: rgba(168, 85, 247, 0.15);
+    color: #9333EA;
+    border: 1px solid rgba(168, 85, 247, 0.3);
 }
 
 /* ============================================
    BUTTONS
    ============================================ */
 button {
-    background: var(--primary);
-    color: white;
+    padding: 12px 20px;
     border: none;
-    padding: 12px 24px;
     border-radius: 8px;
-    cursor: pointer;
-    font-size: 0.9rem;
+    font-size: 0.95rem;
     font-weight: 600;
+    cursor: pointer;
     font-family: inherit;
+    color: white;
     margin-right: 12px;
     display: inline-flex;
     align-items: center;
@@ -832,7 +784,7 @@ button.small {
 
 .actions-cell {
     white-space: nowrap;
-    min-width: 300px;
+    min-width: 150px;
 }
 
 /* ============================================
@@ -1038,6 +990,10 @@ button.small {
 .modal-actions button {
     margin: 0;
     min-width: 120px;
+}
+
+.modal-body {
+    padding: 0;
 }
 
 .info-section {
